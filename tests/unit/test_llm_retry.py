@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import pytest
 
+from app.services.llm.base import LLMResponse, LLMUsage
 from app.services.llm.gemini import _is_transient
 
 
@@ -63,3 +64,24 @@ def test_plan_quota_exhaustion_is_not_retried() -> None:
 
 def test_plain_rate_limiting_is_still_retried() -> None:
     assert _is_transient(Exception("429 RESOURCE_EXHAUSTED. Too many requests.")) is True
+
+
+# --------------------------------------------------- truncation handling ----
+
+
+def _response(finish_reason: str | None) -> LLMResponse:
+    return LLMResponse(text="answer", usage=LLMUsage(), model="m", finish_reason=finish_reason)
+
+
+def test_hitting_the_output_cap_is_reported_as_truncated() -> None:
+    # Found live: a tight budget returned 'Full' — a truncated answer that had
+    # lost its citation marker, presented as a complete one.
+    assert _response("FinishReason.MAX_TOKENS").truncated is True
+
+
+def test_a_normal_stop_is_not_truncated() -> None:
+    assert _response("FinishReason.STOP").truncated is False
+
+
+def test_missing_finish_reason_is_not_truncated() -> None:
+    assert _response(None).truncated is False

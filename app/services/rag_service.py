@@ -176,6 +176,7 @@ class RagService:
             citations=citations if include_sources else [],
             grounded=True,
             model=self._llm.model,
+            truncated=completion.truncated,
             usage=QueryUsage(
                 prompt_tokens=completion.usage.prompt_tokens,
                 completion_tokens=completion.usage.completion_tokens,

@@ -30,6 +30,16 @@ class LLMResponse:
     model: str
     finish_reason: str | None = None
 
+    @property
+    def truncated(self) -> bool:
+        """The model hit the output cap rather than finishing.
+
+        A truncated answer can stop mid-sentence and, worse, lose the citation
+        markers that make it verifiable — so the caller has to be told rather
+        than handed it as if it were complete.
+        """
+        return self.finish_reason is not None and "MAX_TOKENS" in self.finish_reason
+
 
 @runtime_checkable
 class LLMProvider(Protocol):

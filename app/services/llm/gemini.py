@@ -93,11 +93,32 @@ class GeminiLLMProvider:
         except Exception as exc:
             raise LLMError(f"Gemini generation failed: {exc}") from exc
 
+        text = response.text or ""
+        finish_reason = self._finish_reason(response)
+
+        if not text.strip():
+            # Newer Gemini models spend output budget on internal reasoning, so
+            # a tight max_output_tokens can return success with nothing in it.
+            # Returning that as an answer would be worse than failing.
+            raise LLMError(
+                "Gemini returned an empty completion. If finish_reason is "
+                "MAX_TOKENS, raise LLM__MAX_OUTPUT_TOKENS.",
+                details={"finish_reason": finish_reason, "model": self._config.model},
+            )
+
+        if finish_reason and "MAX_TOKENS" in finish_reason:
+            logger.warning(
+                "llm_response_truncated",
+                model=self._config.model,
+                max_output_tokens=self._config.max_output_tokens,
+                completion_tokens=self._usage(response).completion_tokens,
+            )
+
         return LLMResponse(
-            text=response.text or "",
+            text=text,
             usage=self._usage(response),
             model=self._config.model,
-            finish_reason=self._finish_reason(response),
+            finish_reason=finish_reason,
         )
 
     async def stream(self, *, system: str, prompt: str) -> AsyncIterator[str]:

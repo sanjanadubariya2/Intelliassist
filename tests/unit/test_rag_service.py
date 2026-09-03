@@ -7,6 +7,7 @@ difference between "I don't know" and a confident fabrication.
 from __future__ import annotations
 
 import uuid
+from dataclasses import replace
 
 from app.schemas.retrieval import RetrievalSource, RetrievedChunk, ScoredChunk
 from app.services.llm.fake import FakeLLMProvider
@@ -216,3 +217,24 @@ async def test_stream_abstains_without_calling_the_model() -> None:
 
 def kinds_index(events: list[tuple[str, dict[str, object]]], kind: str) -> int:
     return next(index for index, (name, _) in enumerate(events) if name == kind)
+
+
+async def test_truncated_completion_is_flagged_to_the_caller() -> None:
+    class _TruncatingLLM(FakeLLMProvider):
+        async def complete(self, *, system: str, prompt: str):  # type: ignore[no-untyped-def]
+            response = await super().complete(system=system, prompt=prompt)
+            return replace(response, finish_reason="FinishReason.MAX_TOKENS")
+
+    response = await build([scored("text")], llm=_TruncatingLLM()).answer(
+        query="q", knowledge_base_id=KB
+    )
+
+    # The answer is still usable, but the caller must know it is incomplete.
+    assert response.truncated is True
+    assert response.answer
+
+
+async def test_a_complete_answer_is_not_flagged_truncated() -> None:
+    response = await build([scored("text")]).answer(query="q", knowledge_base_id=KB)
+
+    assert response.truncated is False

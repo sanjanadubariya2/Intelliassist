@@ -80,7 +80,7 @@ class EmbeddingConfig(BaseModel):
 
 class LLMConfig(BaseModel):
     provider: Literal["gemini", "fake"] = "gemini"
-    model: str = "gemini-3.8-flash"
+    model: str = "gemini-3.1-flash-lite"
     temperature: float = 0.2
     max_output_tokens: int = 1536
     timeout_seconds: float = 60.0

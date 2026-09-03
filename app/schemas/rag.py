@@ -66,6 +66,13 @@ class RagQueryResponse(BaseModel):
         )
     )
     model: str
+    truncated: bool = Field(
+        default=False,
+        description=(
+            "True when the model hit its output cap. The answer is usable but "
+            "incomplete, and may have lost trailing citation markers."
+        ),
+    )
     usage: QueryUsage
     timings: QueryTimings
 

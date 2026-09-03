@@ -20,7 +20,7 @@ Query     →  embed  →  dense + BM25  →  RRF  →  rerank  →  context  �
 
 | Concern | Choice |
 | --- | --- |
-| LLM | Gemini (`gemini-3.8-flash`) behind an `LLMProvider` protocol |
+| LLM | Gemini (`gemini-3.1-flash-lite`) behind an `LLMProvider` protocol |
 | Embeddings | `gemini-embedding-001`, truncated to **768** dimensions |
 | Vector store | PostgreSQL 17 + pgvector **≥ 0.8**, HNSW / cosine |
 | Sparse retrieval | `rank-bm25`, per knowledge base |
@@ -104,7 +104,7 @@ place a model name, dimension or threshold appears. Settings are nested, joined
 by a double underscore:
 
 ```bash
-INTELLIASSIST_LLM__MODEL=gemini-3.8-flash
+INTELLIASSIST_LLM__MODEL=gemini-3.1-flash-lite
 INTELLIASSIST_RETRIEVAL__FINAL_TOP_N=6
 INTELLIASSIST_EMBEDDING__DIMENSION=768
 ```
