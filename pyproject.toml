@@ -1,0 +1,125 @@
+[project]
+name = "intelliassist"
+version = "0.1.0"
+description = "Standalone RAG service: ingestion, hybrid retrieval, grounded generation."
+readme = "README.md"
+requires-python = ">=3.12,<3.14"
+
+dependencies = [
+    # --- web ---
+    "fastapi>=0.115",
+    "uvicorn[standard]>=0.32",
+    "pydantic>=2.9",
+    "pydantic-settings>=2.6",
+    "python-multipart>=0.0.12",
+    # --- data ---
+    "sqlalchemy[asyncio]>=2.0.36",
+    "asyncpg>=0.30",
+    "pgvector>=0.3.6",
+    "alembic>=1.14",
+    # --- infra ---
+    "redis>=5.2",
+    "arq>=0.26",
+    "tenacity>=9.0",
+    "structlog>=24.4",
+    "httpx>=0.28",
+    # --- extraction ---
+    "pymupdf>=1.24",
+    "python-docx>=1.1",
+    "charset-normalizer>=3.4",
+    # --- ai ---
+    "google-genai>=1.0",
+    "tiktoken>=0.8",
+    "rank-bm25>=0.2.2",
+]
+
+[project.optional-dependencies]
+# Isolated because sentence-transformers pulls torch (~2.5 GB). Without this
+# extra installed the service falls back to NoopReranker, which is what CI uses.
+rerank = ["sentence-transformers>=3.3"]
+
+[dependency-groups]
+dev = [
+    "pytest>=8.3",
+    "pytest-asyncio>=0.24",
+    "pytest-cov>=6.0",
+    "ruff>=0.8",
+    "mypy>=1.13",
+]
+
+[project.scripts]
+intelliassist = "app.cli:main"
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["app"]
+
+# ---------------------------------------------------------------- ruff ------
+[tool.ruff]
+target-version = "py312"
+line-length = 100
+src = ["app", "tests"]
+
+[tool.ruff.lint]
+select = [
+    "E", "W",   # pycodestyle
+    "F",        # pyflakes
+    "I",        # isort
+    "B",        # bugbear
+    "UP",       # pyupgrade
+    "ASYNC",    # flake8-async
+    "SIM",      # flake8-simplify
+    "RUF",
+]
+ignore = [
+    "B008",  # FastAPI's Depends() in defaults is the documented idiom
+]
+
+[tool.ruff.lint.isort]
+known-first-party = ["app"]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/*" = ["B011"]
+# The cleaner's whole job is mapping confusable Unicode to ASCII, so the
+# "ambiguous character" lint fires on every entry in the table by design.
+"app/services/ingestion/cleaner.py" = ["RUF001", "RUF003"]
+# Same reason: these tests feed confusable Unicode in on purpose.
+"tests/unit/test_cleaner.py" = ["RUF001", "RUF003"]
+
+# ---------------------------------------------------------------- mypy ------
+[tool.mypy]
+python_version = "3.12"
+plugins = ["pydantic.mypy"]
+strict = true
+warn_unreachable = true
+disallow_untyped_decorators = false  # FastAPI decorators are untyped
+exclude = ["app/db/migrations/"]
+
+[[tool.mypy.overrides]]
+module = ["rank_bm25.*", "sentence_transformers.*", "docx.*", "arq.*"]
+ignore_missing_imports = true
+
+# PyMuPDF ships incomplete inline annotations: Document is untyped and does not
+# advertise __iter__, so strict mode rejects correct code. Skipping the follow
+# makes it Any rather than wrong.
+[[tool.mypy.overrides]]
+module = ["pymupdf.*", "fitz.*"]
+ignore_missing_imports = true
+follow_imports = "skip"
+
+# -------------------------------------------------------------- pytest ------
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+asyncio_mode = "auto"
+asyncio_default_fixture_loop_scope = "function"
+addopts = "-q --strict-markers"
+markers = [
+    "integration: requires Postgres/Redis via testcontainers (deselect with -m 'not integration')",
+]
+
+[tool.coverage.run]
+source = ["app"]
+omit = ["app/db/migrations/*"]

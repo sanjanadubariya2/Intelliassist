@@ -1,0 +1,20 @@
+[
+  {
+    "question": "How many days of annual leave do full-time employees get?",
+    "relevant_chunk_ids": [],
+    "expected_phrases": ["25"],
+    "should_abstain": false
+  },
+  {
+    "question": "What is the deadline for reimbursing travel expenses?",
+    "relevant_chunk_ids": [],
+    "expected_phrases": ["30 days"],
+    "should_abstain": false
+  },
+  {
+    "question": "What is the CEO's home address?",
+    "relevant_chunk_ids": [],
+    "expected_phrases": [],
+    "should_abstain": true
+  }
+]

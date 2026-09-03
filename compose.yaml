@@ -1,0 +1,84 @@
+# Development dependencies for IntelliAssist.
+#
+#   docker compose up -d             -> Postgres + Redis only (the usual loop:
+#                                       run the API locally against these)
+#   docker compose --profile app up  -> also builds and runs API + worker
+#
+# The pgvector image is pinned rather than installing the extension by hand
+# because the service requires pgvector >= 0.8 for iterative index scans, which
+# is what keeps filtered vector search from silently under-returning rows.
+
+name: intelliassist
+
+services:
+  postgres:
+    image: pgvector/pgvector:pg17
+    environment:
+      POSTGRES_USER: intelliassist
+      POSTGRES_PASSWORD: intelliassist
+      POSTGRES_DB: intelliassist
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+      - ./docker/init-pgvector.sql:/docker-entrypoint-initdb.d/10-pgvector.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U intelliassist -d intelliassist"]
+      interval: 5s
+      timeout: 3s
+      retries: 12
+      start_period: 10s
+
+  redis:
+    image: redis:7-alpine
+    command: ["redis-server", "--appendonly", "yes", "--save", ""]
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis-data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 12
+
+  api:
+    profiles: ["app"]
+    build:
+      context: .
+      dockerfile: docker/Dockerfile
+    environment:
+      INTELLIASSIST_DATABASE__URL: postgresql+asyncpg://intelliassist:intelliassist@postgres:5432/intelliassist
+      INTELLIASSIST_REDIS__URL: redis://redis:6379/0
+      INTELLIASSIST_APP__ENV: local
+      INTELLIASSIST_APP__LOG_JSON: "true"
+      GEMINI_API_KEY: ${GEMINI_API_KEY:-}
+    ports:
+      - "8000:8000"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
+  worker:
+    profiles: ["app"]
+    build:
+      context: .
+      dockerfile: docker/Dockerfile
+    command: ["arq", "app.workers.queue.WorkerSettings"]
+    environment:
+      INTELLIASSIST_DATABASE__URL: postgresql+asyncpg://intelliassist:intelliassist@postgres:5432/intelliassist
+      INTELLIASSIST_REDIS__URL: redis://redis:6379/0
+      INTELLIASSIST_APP__ENV: local
+      INTELLIASSIST_APP__LOG_JSON: "true"
+      GEMINI_API_KEY: ${GEMINI_API_KEY:-}
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
+volumes:
+  postgres-data:
+  redis-data:

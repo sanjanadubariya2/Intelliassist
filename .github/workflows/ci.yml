@@ -1,0 +1,73 @@
+name: CI
+
+on:
+  push:
+    branches: [main, master]
+  pull_request:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  UV_FROZEN: "1"
+
+jobs:
+  quality:
+    name: lint · types · unit tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+
+      - name: Sync dependencies
+        # Without the `rerank` extra, so torch never reaches CI. The service
+        # falls back to NoopReranker, which is what these tests exercise.
+        run: uv sync --all-groups
+
+      - name: Ruff (lint)
+        run: uv run ruff check app tests
+
+      - name: Ruff (format)
+        run: uv run ruff format --check app tests
+
+      - name: Mypy
+        run: uv run mypy app
+
+      - name: Unit tests
+        run: uv run pytest -m "not integration" --cov=app --cov-report=term-missing
+
+  integration:
+    name: integration tests
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        # Must be >= 0.8 for the iterative index scans filtered vector search
+        # depends on; the pg17 images ship 0.8.x.
+        image: pgvector/pgvector:pg17
+        env:
+          POSTGRES_USER: intelliassist
+          POSTGRES_PASSWORD: intelliassist
+          POSTGRES_DB: intelliassist
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U intelliassist"
+          --health-interval 5s --health-timeout 5s --health-retries 12
+      redis:
+        image: redis:7-alpine
+        ports: ["6379:6379"]
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 5s --health-timeout 5s --health-retries 12
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+      - run: uv sync --all-groups
+      - name: Integration tests
+        run: uv run pytest -m integration
