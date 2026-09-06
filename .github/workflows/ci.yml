@@ -16,6 +16,11 @@ jobs:
   quality:
     name: lint · types · unit tests
     runs-on: ubuntu-latest
+    defaults:
+      run:
+        # The Python service lives in its own folder alongside the backend,
+        # frontend and widget.
+        working-directory: ai-service
     steps:
       - uses: actions/checkout@v4
 
@@ -44,6 +49,9 @@ jobs:
   integration:
     name: integration tests
     runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: ai-service
     services:
       postgres:
         # Must be >= 0.8 for the iterative index scans filtered vector search

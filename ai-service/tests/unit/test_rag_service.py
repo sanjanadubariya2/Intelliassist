@@ -12,6 +12,7 @@ from dataclasses import replace
 from app.schemas.retrieval import RetrievalSource, RetrievedChunk, ScoredChunk
 from app.services.llm.fake import FakeLLMProvider
 from app.services.llm.prompts import NO_CONTEXT_ANSWER
+from app.services.query_rewrite import ConversationTurn, RewriteResult
 from app.services.rag_service import RagService
 from app.services.reranking.noop import NoopReranker
 from tests.conftest import make_settings
@@ -39,8 +40,11 @@ def scored(text: str, score: float = 0.9) -> ScoredChunk:
 class _StubRetriever:
     def __init__(self, results: list[ScoredChunk]) -> None:
         self._results = results
+        #: Every query the pipeline actually searched with.
+        self.queries: list[str] = []
 
-    async def retrieve(self, **_: object) -> list[ScoredChunk]:
+    async def retrieve(self, **kwargs: object) -> list[ScoredChunk]:
+        self.queries.append(str(kwargs.get("query", "")))
         return list(self._results)
 
 
@@ -65,12 +69,13 @@ class _ScoringReranker:
         ]
 
 
-def build(retrieved: list[ScoredChunk], *, llm=None, reranker=None):  # type: ignore[no-untyped-def]
+def build(retrieved: list[ScoredChunk], *, llm=None, reranker=None, query_rewriter=None):  # type: ignore[no-untyped-def]
     return RagService(
         settings=make_settings(),
         retriever=_StubRetriever(retrieved),
         reranker=reranker or NoopReranker(),
         llm=llm or FakeLLMProvider(),
+        query_rewriter=query_rewriter,
     )
 
 
@@ -238,3 +243,114 @@ async def test_a_complete_answer_is_not_flagged_truncated() -> None:
     response = await build([scored("text")]).answer(query="q", knowledge_base_id=KB)
 
     assert response.truncated is False
+
+
+# ------------------------------------------------- conversational rewriting --
+
+
+class _FixedRewriter:
+    """Always produces the same standalone query."""
+
+    def __init__(self, rewritten: str) -> None:
+        self._rewritten = rewritten
+        self.seen: list[tuple[str, int]] = []
+
+    async def rewrite(self, *, query: str, history):  # type: ignore[no-untyped-def]
+        self.seen.append((query, len(history)))
+        return RewriteResult(query, self._rewritten, changed=True)
+
+
+async def test_the_rewritten_query_is_what_reaches_retrieval() -> None:
+    """Spec item 10. The whole point of the feature.
+
+    A follow-up embeds nowhere near its own topic; the rewritten form is what
+    must reach the index.
+    """
+    service = build(
+        [scored("Part-time staff receive a pro-rata entitlement.")],
+        query_rewriter=_FixedRewriter("What leave do part-time staff receive?"),
+    )
+
+    await service.answer(
+        query="What about part-timers?",
+        knowledge_base_id=uuid.uuid4(),
+        history=[ConversationTurn("user", "What is the leave policy?")],
+    )
+
+    retriever = service._retriever  # type: ignore[attr-defined]
+    assert retriever.queries == ["What leave do part-time staff receive?"]
+
+
+async def test_the_original_query_is_preserved_in_the_response() -> None:
+    """Spec item 11.
+
+    The caller persists this as the visitor's message. Storing our
+    reconstruction of the question instead would show the user words they
+    never typed.
+    """
+    service = build(
+        [scored("Part-time staff receive a pro-rata entitlement.")],
+        query_rewriter=_FixedRewriter("What leave do part-time staff receive?"),
+    )
+
+    response = await service.answer(
+        query="What about part-timers?",
+        knowledge_base_id=uuid.uuid4(),
+        history=[ConversationTurn("user", "What is the leave policy?")],
+    )
+
+    assert response.query == "What about part-timers?"
+    assert response.rewritten_query == "What leave do part-time staff receive?"
+
+
+async def test_without_history_the_pipeline_behaves_exactly_as_before() -> None:
+    """The existing contract. No history, no rewriter call, no new field."""
+    rewriter = _FixedRewriter("should never be used")
+    service = build([scored("Employees receive 25 days.")], query_rewriter=rewriter)
+
+    response = await service.answer(query="How much leave?", knowledge_base_id=uuid.uuid4())
+
+    assert rewriter.seen == []
+    assert response.query == "How much leave?"
+    assert response.rewritten_query is None
+    retriever = service._retriever  # type: ignore[attr-defined]
+    assert retriever.queries == ["How much leave?"]
+
+
+async def test_a_rewriter_that_declines_leaves_retrieval_on_the_original() -> None:
+    class _Declining:
+        async def rewrite(self, *, query: str, history):  # type: ignore[no-untyped-def]
+            return RewriteResult(query, query, changed=False, reason="error")
+
+    service = build([scored("Employees receive 25 days.")], query_rewriter=_Declining())
+
+    response = await service.answer(
+        query="What about part-timers?",
+        knowledge_base_id=uuid.uuid4(),
+        history=[ConversationTurn("user", "What is the leave policy?")],
+    )
+
+    assert response.rewritten_query is None
+    retriever = service._retriever  # type: ignore[attr-defined]
+    assert retriever.queries == ["What about part-timers?"]
+
+
+async def test_the_streamed_path_rewrites_too() -> None:
+    service = build(
+        [scored("Part-time staff receive a pro-rata entitlement.")],
+        query_rewriter=_FixedRewriter("What leave do part-time staff receive?"),
+    )
+
+    events = [
+        event
+        async for event in service.stream(
+            query="What about part-timers?",
+            knowledge_base_id=uuid.uuid4(),
+            history=[ConversationTurn("user", "What is the leave policy?")],
+        )
+    ]
+
+    metadata = next(payload for name, payload in events if name == "metadata")
+    assert metadata["rewritten_query"] == "What leave do part-time staff receive?"
+    retriever = service._retriever  # type: ignore[attr-defined]
+    assert retriever.queries == ["What leave do part-time staff receive?"]

@@ -12,7 +12,10 @@ from pathlib import Path
 
 from app.core.config import DatabaseConfig, RedisConfig
 
-COMPOSE = Path(__file__).resolve().parents[2] / "compose.yaml"
+# One more level up than before: this service now lives in ai-service/,
+# while compose.yaml stays at the repo root because it wires all of the
+# services together.
+COMPOSE = Path(__file__).resolve().parents[3] / "compose.yaml"
 
 
 def _published_host_port(service: str) -> str:

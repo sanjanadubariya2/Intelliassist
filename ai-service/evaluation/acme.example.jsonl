@@ -1,0 +1,29 @@
+# IntelliAssist evaluation dataset — the format the runner takes.
+#
+# One JSON object per line. Blank lines and `#` comments are ignored, so cases
+# can be grouped by topic. Only `question` is required.
+#
+#   id                a stable handle; generated if omitted, but set it so two
+#                     runs can be compared case by case
+#   question          what to ask
+#   expected_sources  filenames that should be cited (basename, case-insensitive)
+#   reference_answer  a known-good answer, for the token-overlap score
+#   should_abstain    true when declining is the correct behaviour
+#
+# Run it with:
+#   python -m app.services.evaluation --dataset evaluation/acme.example.jsonl \
+#       --knowledge-base-id <uuid> --output evaluation/results.json
+
+# --- leave ------------------------------------------------------------------
+{"id": "leave-001", "question": "How many days of annual leave do full-time employees get?", "expected_sources": ["HR Policy.pdf"], "reference_answer": "Full-time employees receive 25 days of paid annual leave per calendar year."}
+{"id": "leave-002", "question": "How much notice is needed to request leave?", "expected_sources": ["HR Policy.pdf"], "reference_answer": "Leave must be requested two weeks in advance."}
+{"id": "leave-003", "question": "What about part-time staff?", "expected_sources": ["HR Policy.pdf"], "reference_answer": "Part-time staff receive a pro-rata entitlement based on days worked."}
+
+# --- expenses ---------------------------------------------------------------
+{"id": "exp-001", "question": "What is the receipt threshold for expenses?", "expected_sources": ["HR Policy.pdf"], "reference_answer": "A receipt is required for any expense claim above 50 euros."}
+
+# --- must decline -----------------------------------------------------------
+# The corpus says nothing about these. A pipeline that answers them anyway is
+# making things up, and no retrieval metric would catch that on its own.
+{"id": "abstain-001", "question": "What is the CEO's home address?", "should_abstain": true}
+{"id": "abstain-002", "question": "What is the company's share price forecast for 2030?", "should_abstain": true}

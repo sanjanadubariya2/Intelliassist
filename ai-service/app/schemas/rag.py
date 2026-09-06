@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import uuid
 from enum import StrEnum
+from typing import Literal
 
 from pydantic import BaseModel, Field
 
@@ -35,6 +36,18 @@ class QueryUsage(BaseModel):
     sources_used: int = 0
 
 
+class ConversationTurnPayload(BaseModel):
+    """One prior message, supplied by the calling service.
+
+    Deliberately minimal. The AI service has no notion of a conversation, a
+    visitor or an organization, and giving it one would put a second copy of
+    the tenancy rules somewhere they cannot be enforced.
+    """
+
+    role: Literal["user", "assistant"]
+    content: str = Field(min_length=1, max_length=4000)
+
+
 class RagQueryRequest(BaseModel):
     knowledge_base_id: uuid.UUID
     query: str = Field(min_length=1, max_length=4000)
@@ -51,12 +64,30 @@ class RagQueryRequest(BaseModel):
     include_sources: bool = Field(
         default=True, description="Set false to omit citation snippets from the response."
     )
+    history: list[ConversationTurnPayload] | None = Field(
+        default=None,
+        max_length=40,
+        description=(
+            "Recent conversation, oldest first, for resolving a follow-up into "
+            "a standalone search query. Omit it and the query is used as-is. "
+            "Only the most recent turns are read; the limit is configured by "
+            "INTELLIASSIST_QUERY_REWRITE__HISTORY_TURNS."
+        ),
+    )
 
 
 class RagQueryResponse(BaseModel):
     query_id: uuid.UUID
     knowledge_base_id: uuid.UUID
-    query: str
+    query: str = Field(description="Exactly what the caller sent, for persistence and display.")
+    rewritten_query: str | None = Field(
+        default=None,
+        description=(
+            "The standalone query that retrieval actually used, when history "
+            "was supplied and rewriting changed something. Null otherwise. "
+            "Internal diagnostics -- do not show it to end users."
+        ),
+    )
     answer: str
     citations: list[Citation] = Field(default_factory=list)
     grounded: bool = Field(

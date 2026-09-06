@@ -36,31 +36,76 @@ lose its index and degrade every query to a sequential scan.
 
 ## Quick start
 
-Requires [uv](https://docs.astral.sh/uv/) and Docker.
+Requires [uv](https://docs.astral.sh/uv/), Docker, and Node 20+.
+
+Three pieces run together: the **Python AI service** (retrieval and generation),
+the **Spring Boot backend** (tenants, auth, everything the browser talks to),
+and the **Next.js dashboard**. The widget is served by the backend.
 
 ```bash
-# 1. dependencies (Python 3.12 is fetched automatically)
+# 1. configuration
+#    -n so a re-run never clobbers an .env you have already filled in.
+cp -n .env.example .env
+#    then set, at minimum:
+#      GEMINI_API_KEY   your key from https://aistudio.google.com/apikey
+#      JWT_SECRET       openssl rand -base64 48
+#    AI_SERVICE_API_KEY must equal INTELLIASSIST_APP__API_KEY. The defaults
+#    already match, so leave both alone unless you change one.
+
+# 2. everything except the dashboard: Postgres, Redis, AI service,
+#    ingestion worker, and the backend
+docker compose --profile app up -d --build
+
+# 3. the dashboard
+cd frontend
+npm install
+cp .env.local.example .env.local
+npm run dev
+```
+
+Then open <http://localhost:3000>, create an account, create a bot, and upload a
+document. Once it reaches **Ready**, the Playground tab will answer from it.
+
+| | |
+| --- | --- |
+| Dashboard | <http://localhost:3000> |
+| Backend API | <http://localhost:8080/api/v1/health> |
+| AI service docs | <http://localhost:8000/docs> |
+| Widget script | <http://localhost:8080/widget/intelliassist.js> |
+
+The AI service is published on :8000 for local inspection only. In a deployed
+environment it sits on a private network — the browser and the widget talk to
+the Spring Boot API and nothing else.
+
+### Working on the AI service alone
+
+It runs on its own, without the backend:
+
+```bash
+docker compose up -d          # just Postgres and Redis
+
+cd ai-service
 uv sync --all-groups
-
-# 2. Postgres + Redis
-docker compose up -d
-
-# 3. configuration
-cp .env.example .env        # then set GEMINI_API_KEY
-
-# 4. run
 uv run uvicorn app.main:app --reload
+uv run arq app.workers.ingestion_worker.WorkerSettings   # in a second shell
 ```
 
 - API docs: <http://localhost:8000/docs>
 - Liveness: <http://localhost:8000/health/live>
 - Readiness: <http://localhost:8000/health/ready>
 
-To run the API and worker in containers too:
+### Trying the widget
+
+Any static server works; the page injects the widget exactly as a customer's
+site would.
 
 ```bash
-docker compose --profile app up --build
+npx serve widget    # then open http://localhost:3000/demo/
 ```
+
+Create an API key and add `localhost` as an allowed domain first, from the
+bot's **Embed** tab — without a matching domain every request is rejected with
+`401`, which is the point of the domain check.
 
 ### Without torch
 
@@ -79,6 +124,7 @@ Set `INTELLIASSIST_RERANKER__ENABLED=false` to match.
 ## Testing
 
 ```bash
+cd ai-service
 uv run pytest -m "not integration"   # unit: no database, no network, no API key
 uv run pytest                         # everything (integration needs Docker)
 uv run ruff check app tests
@@ -99,7 +145,7 @@ AI providers: the point is the SQL, the pgvector index and the wiring.
 
 ## Configuration
 
-`app/core/config.py` is the only module that reads the environment, and the only
+`ai-service/app/core/config.py` is the only module that reads the environment, and the only
 place a model name, dimension or threshold appears. Settings are nested, joined
 by a double underscore:
 
@@ -153,6 +199,18 @@ across the hop.
 
 ---
 
+## Deploying
+
+See [`docs/DEPLOYMENT.md`](docs/DEPLOYMENT.md) — a single VM with Compose, or
+split across managed services, with the production settings that are not the
+defaults and a checklist before you call it live.
+
+The one rule everything else rests on: **the AI service must not be reachable
+from the internet.** It has no concept of an organization, so anything that
+could reach it directly would bypass every tenancy check at once.
+
+---
+
 ## Security and deployment topology
 
 This service is **not** internet-facing. It sits behind the Spring Boot public
@@ -202,22 +260,50 @@ by setting the new value and restarting — there is no persisted copy to migrat
 
 ## Layout
 
+Four deployable pieces, one folder each.
+
 ```
-app/
-├── api/            HTTP layer — routing, guards, error translation
-├── core/           config, logging, exception hierarchy
-├── db/             engine, session, Redis pool, migrations
-├── models/         SQLAlchemy ORM — never crosses the API boundary
-├── schemas/        Pydantic — the public contract
-├── repositories/   all SQL, including vector search
-├── services/
-│   ├── ingestion/  extractors · cleaner · chunker · pipeline
-│   ├── embeddings/ provider protocol + Gemini + fake + cache
-│   ├── retrieval/  dense · bm25 · fusion (RRF)
-│   ├── reranking/  cross-encoder · noop
-│   ├── llm/        provider protocol + Gemini + fake + prompts
-│   └── citations/  context builder · citation extractor
-└── workers/        arq ingestion worker
+ai-service/     Python · FastAPI · the RAG pipeline. No public route.
+backend/        Java · Spring Boot · tenancy, auth, and the only public API.
+frontend/       TypeScript · Next.js · the dashboard.
+widget/         TypeScript · the embeddable chat widget.
+
+compose.yaml    wires them together for local development
+docker/         shared infrastructure (Postgres init)
+docs/           cross-cutting documentation
+```
+
+The dependency direction is one-way and deliberate:
+
+```
+browser ──► frontend ──┐
+                       ├──► backend ──► ai-service ──► Gemini
+customer site ─► widget┘
+```
+
+Nothing reaches the AI service except the backend, because the AI service has
+no concept of an organization — every tenancy check lives in Spring Boot, so
+anything that could bypass it would bypass all of them.
+
+Inside `ai-service/app`:
+
+```
+api/            HTTP layer — routing, guards, error translation
+core/           config, logging, exception hierarchy
+db/             engine, session, Redis pool, migrations
+models/         SQLAlchemy ORM — never crosses the API boundary
+schemas/        Pydantic — the public contract
+repositories/   all SQL, including vector search
+services/
+  ingestion/    extractors · cleaner · chunker · pipeline
+  embeddings/   provider protocol + Gemini + fake + cache
+  retrieval/    dense · bm25 · fusion (RRF)
+  reranking/    cross-encoder · noop
+  llm/          provider protocol + Gemini + fake + prompts
+  query_rewrite/  follow-up → standalone search query
+  evaluation/   metrics · dataset runner · reporting
+  citations/    context builder · citation extractor
+workers/        arq ingestion worker
 ```
 
 Provider boundaries are `typing.Protocol`, not base classes: a test fake is a
@@ -246,9 +332,10 @@ All eleven phases are implemented.
 ## Operator CLI
 
 ```bash
+cd ai-service
 uv run intelliassist config      # effective configuration, secrets masked
 uv run intelliassist reindex --knowledge-base-id <uuid>
-uv run intelliassist eval --knowledge-base-id <uuid> --golden-set evaluation/golden_set.json
+uv run intelliassist eval --knowledge-base-id <uuid> --golden-set evaluation/golden_set.example.json
 ```
 
 `eval` reports hit@5, recall@5, precision@5, MRR, nDCG@5, citation precision and
@@ -264,6 +351,7 @@ Ingestion happens off the request path. The API returns `202`; this consumes the
 queue:
 
 ```bash
+cd ai-service
 uv run arq app.workers.ingestion_worker.WorkerSettings
 ```
 

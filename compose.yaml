@@ -45,8 +45,8 @@ services:
   api:
     profiles: ["app"]
     build:
-      context: .
-      dockerfile: docker/Dockerfile
+      context: ./ai-service
+      dockerfile: Dockerfile
     environment:
       INTELLIASSIST_DATABASE__URL: postgresql+asyncpg://intelliassist:intelliassist@postgres:5432/intelliassist
       INTELLIASSIST_REDIS__URL: redis://redis:6379/0
@@ -64,20 +64,73 @@ services:
   worker:
     profiles: ["app"]
     build:
-      context: .
-      dockerfile: docker/Dockerfile
-    command: ["arq", "app.workers.queue.WorkerSettings"]
+      context: ./ai-service
+      dockerfile: Dockerfile
+    command: ["arq", "app.workers.ingestion_worker.WorkerSettings"]
     environment:
       INTELLIASSIST_DATABASE__URL: postgresql+asyncpg://intelliassist:intelliassist@postgres:5432/intelliassist
       INTELLIASSIST_REDIS__URL: redis://redis:6379/0
       INTELLIASSIST_APP__ENV: local
       INTELLIASSIST_APP__LOG_JSON: "true"
       GEMINI_API_KEY: ${GEMINI_API_KEY:-}
+    # Overrides the image's healthcheck, which probes :8000. The worker shares
+    # the API's image but serves no HTTP, so that probe can only ever fail --
+    # leaving the container permanently "unhealthy" while it happily indexes
+    # documents. A red status nobody believes is worse than none, because it
+    # hides the day something is genuinely wrong.
+    #
+    # What actually matters for this process is that it can still reach the
+    # queue it pulls jobs from.
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "python",
+          "-c",
+          "import asyncio,redis.asyncio as r; asyncio.run(r.from_url('redis://redis:6379/0').ping())",
+        ]
+      interval: 30s
+      timeout: 5s
+      start_period: 20s
+      retries: 3
     depends_on:
       postgres:
         condition: service_healthy
       redis:
         condition: service_healthy
+
+  # ------------------------------------------------------- Spring Boot ---
+  # Profile-gated like the AI service: `docker compose up -d` still gives you
+  # Postgres and Redis only, which is the usual development loop.
+  backend:
+    profiles: ["app"]
+    build:
+      # The repo root, not ./backend: the image bakes in the widget script so
+      # the API can serve the embed snippet's src URL, and widget/ has to be
+      # inside the build context for that COPY to reach it.
+      context: .
+      dockerfile: backend/Dockerfile
+    environment:
+      # Its own database on the shared Postgres server. Separate schema: the AI
+      # service owns chunks and embeddings, the backend owns tenants.
+      DB_URL: jdbc:postgresql://postgres:5432/intelliassist_backend
+      DB_USERNAME: intelliassist
+      DB_PASSWORD: intelliassist
+      # Reached over the compose network, not published to the host: the
+      # backend is the only thing that may talk to the AI service.
+      AI_SERVICE_BASE_URL: http://api:8000
+      AI_SERVICE_API_KEY: "${AI_SERVICE_API_KEY:-}"
+      # Required. Generate with: openssl rand -base64 48
+      JWT_SECRET: "${JWT_SECRET:-}"
+      SPRING_PROFILES_ACTIVE: ${SPRING_PROFILES_ACTIVE:-dev}
+      CORS_ALLOWED_ORIGINS: ${CORS_ALLOWED_ORIGINS:-http://localhost:3000}
+    ports:
+      - "8080:8080"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      api:
+        condition: service_started
 
 volumes:
   postgres-data:

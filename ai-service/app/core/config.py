@@ -149,6 +149,33 @@ class IngestionConfig(BaseModel):
     max_job_retries: int = 2
 
 
+class QueryRewriteConfig(BaseModel):
+    """Turns a follow-up question into a standalone search query.
+
+    Off by default in spirit if not in flag: with no history supplied the
+    rewriter is skipped entirely, so an existing caller sees no change.
+    """
+
+    enabled: bool = True
+
+    # How many prior messages to consider. Six is roughly three exchanges,
+    # which covers the references people actually make ("it", "that one",
+    # "what about part-timers") without paying to re-read a long conversation
+    # on every question. Counted in messages, not exchanges, so an odd number
+    # is meaningful.
+    history_turns: int = Field(default=6, ge=0, le=40)
+
+    # A rewrite is a small, cheap call and must not hold up an answer. If the
+    # model is slow the original query is used instead.
+    timeout_seconds: float = Field(default=8.0, gt=0)
+
+    # Truncation guards. History arrives from another service and ultimately
+    # from the public internet; without a cap a caller could push an arbitrary
+    # payload into the prompt.
+    max_message_chars: int = Field(default=600, ge=100, le=4000)
+    max_query_chars: int = Field(default=400, ge=50, le=2000)
+
+
 class Settings(BaseSettings):
     model_config = SettingsConfigDict(
         env_prefix="INTELLIASSIST_",
@@ -167,6 +194,7 @@ class Settings(BaseSettings):
     retrieval: RetrievalConfig = Field(default_factory=RetrievalConfig)
     reranker: RerankerConfig = Field(default_factory=RerankerConfig)
     ingestion: IngestionConfig = Field(default_factory=IngestionConfig)
+    query_rewrite: QueryRewriteConfig = Field(default_factory=QueryRewriteConfig)
 
     # Accepted from the vendor-conventional names too, so an existing shell
     # export works without renaming.

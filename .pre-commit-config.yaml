@@ -2,29 +2,36 @@
 # after it. Hooks are `local` and shell out to uv, so there is exactly one
 # source of truth for tool versions — the lockfile — instead of a second set
 # pinned here that can drift from it.
+#
+# Each hook cds into ai-service rather than using `uv run --project`: the
+# flag selects the environment but leaves the working directory at the repo
+# root, so ruff and mypy never read ai-service/pyproject.toml and mypy fails
+# on the import overrides that file exists to declare.
 
 repos:
   - repo: local
     hooks:
       - id: ruff-check
         name: ruff (lint)
-        entry: uv run ruff check --fix
+        entry: bash -c 'cd ai-service && uv run ruff check --fix app tests'
         language: system
         types_or: [python, pyi]
+        pass_filenames: false
         require_serial: true
 
       - id: ruff-format
         name: ruff (format)
-        entry: uv run ruff format
+        entry: bash -c 'cd ai-service && uv run ruff format app tests'
         language: system
         types_or: [python, pyi]
+        pass_filenames: false
         require_serial: true
 
       - id: mypy
         name: mypy (strict)
         # Passing changed files alone would miss errors in their dependents, so
         # the whole package is checked. It takes a couple of seconds.
-        entry: uv run mypy app
+        entry: bash -c 'cd ai-service && uv run mypy app'
         language: system
         types: [python]
         pass_filenames: false

@@ -27,6 +27,12 @@ from app.services.llm.prompts import (
     SYSTEM_PROMPT,
     build_user_prompt,
 )
+from app.services.query_rewrite import (
+    ConversationTurn,
+    PassthroughQueryRewriter,
+    QueryRewriter,
+    RewriteResult,
+)
 from app.services.reranking.base import Reranker
 from app.services.retrieval.base import Retriever
 
@@ -52,12 +58,28 @@ class RagService:
         retriever: Retriever,
         reranker: Reranker,
         llm: LLMProvider,
+        query_rewriter: QueryRewriter | None = None,
     ) -> None:
         self._settings = settings
         self._retriever = retriever
         self._reranker = reranker
         self._llm = llm
+        # Defaulted rather than required, so every existing construction site
+        # keeps working and behaves exactly as it did before.
+        self._query_rewriter = query_rewriter or PassthroughQueryRewriter()
         self._context_builder = ContextBuilder(token_budget=settings.retrieval.context_token_budget)
+
+    async def _rewrite(
+        self, query: str, history: Sequence[ConversationTurn] | None
+    ) -> RewriteResult:
+        """Resolves a follow-up into a standalone query.
+
+        Skipped entirely when no history is supplied, which is every caller
+        that has not opted in — so the pipeline behaves exactly as before.
+        """
+        if not history:
+            return RewriteResult(query, query, changed=False, reason="no_history")
+        return await self._query_rewriter.rewrite(query=query, history=list(history))
 
     # ------------------------------------------------------------ retrieval --
 
@@ -120,12 +142,15 @@ class RagService:
         top_n: int | None = None,
         document_ids: Sequence[uuid.UUID] | None = None,
         include_sources: bool = True,
+        history: Sequence[ConversationTurn] | None = None,
     ) -> RagQueryResponse:
         query_id = uuid.uuid4()
         total_started = time.perf_counter()
 
+        rewrite = await self._rewrite(query, history)
+
         prepared = await self._prepare(
-            query=query,
+            query=rewrite.query,
             knowledge_base_id=knowledge_base_id,
             top_n=top_n,
             document_ids=document_ids,
@@ -151,7 +176,7 @@ class RagService:
         started = time.perf_counter()
         completion = await self._llm.complete(
             system=SYSTEM_PROMPT,
-            prompt=build_user_prompt(question=query, context=prepared.context.text),
+            prompt=build_user_prompt(question=rewrite.query, context=prepared.context.text),
         )
         generation_ms = (time.perf_counter() - started) * 1000
 
@@ -172,6 +197,7 @@ class RagService:
             query_id=query_id,
             knowledge_base_id=knowledge_base_id,
             query=query,
+            rewritten_query=rewrite.rewritten if rewrite.changed else None,
             answer=answer_text,
             citations=citations if include_sources else [],
             grounded=True,
@@ -201,6 +227,7 @@ class RagService:
         knowledge_base_id: uuid.UUID,
         top_n: int | None = None,
         document_ids: Sequence[uuid.UUID] | None = None,
+        history: Sequence[ConversationTurn] | None = None,
     ) -> AsyncIterator[tuple[str, dict[str, object]]]:
         """Yield ``(event_type, payload)`` pairs for the SSE endpoint.
 
@@ -210,8 +237,10 @@ class RagService:
         query_id = uuid.uuid4()
         total_started = time.perf_counter()
 
+        rewrite = await self._rewrite(query, history)
+
         prepared = await self._prepare(
-            query=query,
+            query=rewrite.query,
             knowledge_base_id=knowledge_base_id,
             top_n=top_n,
             document_ids=document_ids,
@@ -224,6 +253,7 @@ class RagService:
                 "knowledge_base_id": str(knowledge_base_id),
                 "grounded": prepared.grounded,
                 "model": self._llm.model,
+                "rewritten_query": rewrite.rewritten if rewrite.changed else None,
                 "sources": [
                     _source_payload(source.marker, source.scored)
                     for source in prepared.context.sources
@@ -247,7 +277,7 @@ class RagService:
         started = time.perf_counter()
         async for delta in self._llm.stream(
             system=SYSTEM_PROMPT,
-            prompt=build_user_prompt(question=query, context=prepared.context.text),
+            prompt=build_user_prompt(question=rewrite.query, context=prepared.context.text),
         ):
             collected.append(delta)
             yield ("token", {"text": delta})

@@ -27,6 +27,7 @@ from app.repositories.knowledge_base_repo import KnowledgeBaseRepository
 from app.schemas.rag import RagQueryRequest, RagQueryResponse
 from app.services.embeddings.base import EmbeddingProvider
 from app.services.llm.base import LLMProvider
+from app.services.query_rewrite import ConversationTurn, LLMQueryRewriter
 from app.services.rag_service import RagService
 from app.services.reranking.base import Reranker
 from app.services.retrieval.bm25 import Bm25Retriever
@@ -70,7 +71,17 @@ def _build_service(
         weights=[config.dense_weight, config.bm25_weight],
         k=config.rrf_k,
     )
-    return RagService(settings=settings, retriever=fusion, reranker=reranker, llm=llm)
+    # Reuses the same provider as generation: one client, one set of
+    # retry and timeout rules, one place to change the model.
+    rewriter = LLMQueryRewriter(llm=llm, config=settings.query_rewrite)
+
+    return RagService(
+        settings=settings,
+        retriever=fusion,
+        reranker=reranker,
+        llm=llm,
+        query_rewriter=rewriter,
+    )
 
 
 async def _assert_knowledge_base_exists(
@@ -81,6 +92,17 @@ async def _assert_knowledge_base_exists(
             f"Knowledge base {knowledge_base_id} does not exist.",
             details={"knowledge_base_id": str(knowledge_base_id)},
         )
+
+
+def _history(payload: RagQueryRequest) -> list[ConversationTurn] | None:
+    """Adapts the wire payload into the rewriter's own type.
+
+    Kept separate so the transport schema and the domain type can move
+    independently — the rewriter has no reason to import a Pydantic model.
+    """
+    if not payload.history:
+        return None
+    return [ConversationTurn(role=turn.role, content=turn.content) for turn in payload.history]
 
 
 @router.post(
@@ -119,12 +141,14 @@ async def query(
         top_n=payload.top_n,
         document_ids=payload.document_ids,
         include_sources=payload.include_sources,
+        history=_history(payload),
     )
 
     logger.info(
         "query_answered",
         query_id=str(response.query_id),
         grounded=response.grounded,
+        rewritten=response.rewritten_query is not None,
         citations=len(response.citations),
         total_ms=response.timings.total_ms,
     )
@@ -173,6 +197,7 @@ async def stream(
                 knowledge_base_id=payload.knowledge_base_id,
                 top_n=payload.top_n,
                 document_ids=payload.document_ids,
+                history=_history(payload),
             ):
                 # Stop generating when the client has gone; otherwise we keep
                 # paying the model for tokens nobody will read.
