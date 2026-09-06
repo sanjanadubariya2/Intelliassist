@@ -1,0 +1,159 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>IntelliAssist widget — demo host page</title>
+    <style>
+      /* Deliberately aggressive, to prove the widget is isolated from it.
+         Every rule here would wreck an unshadowed widget. */
+      * { box-sizing: border-box; }
+      button { background: #c00 !important; border: 4px dashed #0f0 !important;
+               font-size: 22px !important; text-transform: uppercase; }
+      div { line-height: 3; }
+      textarea { background: #ffe !important; border: 3px solid #f0f !important; }
+
+      body {
+        margin: 0; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+        background: #f6f6fb; color: #1a1a2e;
+      }
+      .page { max-width: 720px; margin: 0 auto; padding: 40px 24px 120px; }
+      h1 { font-size: 26px; margin: 0 0 6px; line-height: 1.3; }
+      .sub { color: #6b6b85; margin: 0 0 28px; line-height: 1.6; }
+      .card {
+        background: #fff; border: 1px solid #e6e6f0; border-radius: 12px;
+        padding: 20px; margin-bottom: 18px; line-height: 1.6;
+      }
+      label { display: block; font-size: 13px; font-weight: 600; margin: 12px 0 5px; line-height: 1.4; }
+      input {
+        width: 100%; padding: 9px 11px; font: inherit; font-size: 14px;
+        border: 1px solid #d8d8e6; border-radius: 7px; background: #fff;
+      }
+      .row { display: flex; gap: 12px; }
+      .row > * { flex: 1; }
+      .go {
+        margin-top: 18px; width: 100%; padding: 11px;
+        background: #7C5AED !important; color: #fff;
+        border: 0 !important; border-radius: 8px; cursor: pointer;
+        font-size: 15px !important; font-weight: 600; text-transform: none;
+      }
+      .note { font-size: 13px; color: #6b6b85; }
+      code { background: #f0f0f7; padding: 1px 5px; border-radius: 4px; font-size: 12.5px; }
+      .warn { background: #fff8e6; border-color: #f0dfae; }
+      ol { padding-left: 20px; }
+      li { line-height: 1.7; }
+    </style>
+  </head>
+  <body>
+    <div class="page">
+      <h1>Acme Corp — support</h1>
+      <p class="sub">
+        A stand-in for a customer's website. The page CSS below is intentionally
+        hostile (red buttons, green dashed borders, triple line-height); the
+        widget renders in a shadow root, so none of it applies.
+      </p>
+
+      <div class="card warn">
+        <strong>Before it will answer</strong>
+        <ol>
+          <li>Create a bot and upload a document in the dashboard.</li>
+          <li>Create an API key for that bot — copy the <code>rawKey</code>, shown once.</li>
+          <li>
+            Add this page's host as an allowed domain, or the request is rejected
+            with 401: <code>localhost</code>
+          </li>
+        </ol>
+      </div>
+
+      <div class="card">
+        <label for="api">API base URL</label>
+        <input id="api" value="http://localhost:8080" />
+
+        <label for="key">Bot key</label>
+        <input id="key" placeholder="ia_..." />
+
+        <div class="row">
+          <div>
+            <label for="color">Accent colour</label>
+            <input id="color" value="#7C5AED" />
+          </div>
+          <div>
+            <label for="title">Title</label>
+            <input id="title" value="Acme Assistant" />
+          </div>
+        </div>
+
+        <div class="row">
+          <div>
+            <label for="position">Position</label>
+            <input id="position" value="bottom-right" />
+          </div>
+          <div>
+            <label for="streaming">Streaming</label>
+            <input id="streaming" value="true" />
+          </div>
+        </div>
+
+        <button class="go" id="load">Load widget</button>
+        <p class="note" style="margin-bottom:0">
+          Reloads the page with your settings, then injects the widget exactly
+          as a customer's <code>&lt;script&gt;</code> tag would.
+        </p>
+      </div>
+
+      <div class="card">
+        <strong>Try</strong>
+        <p class="note" style="margin:6px 0 0">
+          Ask something answerable from your document, then something that is
+          not — the second should decline rather than invent an answer, which is
+          the whole point of grounding. Narrow the window below 480px to see the
+          full-screen mobile layout.
+        </p>
+      </div>
+    </div>
+
+    <script>
+      // Settings live in the query string so a reload re-injects the widget
+      // with a real script tag rather than re-configuring it in place.
+      var params = new URLSearchParams(location.search);
+      ["api", "key", "color", "title", "position", "streaming"].forEach(function (id) {
+        var value = params.get(id);
+        if (value) document.getElementById(id).value = value;
+      });
+
+      document.getElementById("load").addEventListener("click", function () {
+        var next = new URLSearchParams();
+        ["api", "key", "color", "title", "position", "streaming"].forEach(function (id) {
+          next.set(id, document.getElementById(id).value.trim());
+        });
+        location.search = next.toString();
+      });
+
+      /** Applies the form's settings as the data-* attributes the widget reads. */
+      function copyConfig(script) {
+        script.dataset.botKey = params.get("key");
+        script.dataset.apiUrl = params.get("api") || "http://localhost:8080";
+        script.dataset.color = params.get("color") || "#7C5AED";
+        script.dataset.title = params.get("title") || "Acme Assistant";
+        script.dataset.position = params.get("position") || "bottom-right";
+        script.dataset.streaming = params.get("streaming") || "true";
+      }
+
+      if (params.get("key")) {
+        var script = document.createElement("script");
+        // The same URL the dashboard's embed snippet hands out: the API
+        // serves the widget from its own origin. Falls back to the local file
+        // when no API is running.
+        script.src = (params.get("api") || "http://localhost:8080") + "/widget/intelliassist.js";
+        script.onerror = function () {
+          var local = document.createElement("script");
+          local.src = "../dist/intelliassist.js";
+          copyConfig(local);
+          document.body.appendChild(local);
+        };
+        copyConfig(script);
+        document.body.appendChild(script);
+      }
+    </script>
+  </body>
+</html>
