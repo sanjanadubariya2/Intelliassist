@@ -1,0 +1,58 @@
+@import "tailwindcss";
+
+/*
+ * The palette from the design: a violet accent on near-white, with a single
+ * ink colour for text and one muted grey for everything secondary. Defined as
+ * theme tokens so the components read `bg-surface` rather than a hex code
+ * repeated eighty times.
+ */
+@theme {
+  --color-accent: #7c5aed;
+  --color-accent-soft: #f1ecfe;
+  --color-accent-strong: #6a46e0;
+
+  --color-canvas: #f6f6fb;
+  --color-surface: #ffffff;
+  --color-line: #e9e9f2;
+
+  --color-ink: #17172b;
+  --color-muted: #6b6b85;
+  --color-faint: #9a9ab0;
+
+  /* The sidebar is a dark navy rail against light content. Its own tokens,
+     because on that surface "muted text" is a pale slate rather than the grey
+     that reads as muted on white. */
+  --color-rail: #141a2e;
+  --color-rail-line: #242c45;
+  --color-rail-text: #e8e9f2;
+  --color-rail-muted: #8b93ad;
+  --color-rail-hover: #1e2740;
+
+  --color-ok: #1a9d6b;
+  --color-ok-soft: #e6f7f0;
+  --color-warn: #b8860b;
+  --color-warn-soft: #fdf6e3;
+  --color-bad: #d0453b;
+  --color-bad-soft: #fdeceb;
+}
+
+html,
+body {
+  background: var(--color-canvas);
+  color: var(--color-ink);
+}
+
+body {
+  -webkit-font-smoothing: antialiased;
+}
+
+/* A visible focus ring everywhere, rather than the browser default that some
+   resets quietly remove. Keyboard users are the ones who need it. */
+:focus-visible {
+  outline: 2px solid var(--color-accent);
+  outline-offset: 2px;
+}
+
+::selection {
+  background: var(--color-accent-soft);
+}

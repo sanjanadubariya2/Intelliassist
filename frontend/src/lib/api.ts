@@ -1,0 +1,621 @@
+/**
+ * The dashboard's only door to the backend.
+ *
+ * Every type here mirrors a Java record in `com.intelliassist.backend.dto`. If
+ * a field is not in that package it is not in this file — a UI built on fields
+ * the API does not return looks finished and works for nobody.
+ *
+ * The browser talks to Spring Boot and nothing else. The Python AI service sits
+ * on a private network with no route from here, which is why there is no
+ * `AI_URL` to configure.
+ */
+
+const BASE_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8080";
+
+// ------------------------------------------------------------------ types --
+
+export type MemberRole = "OWNER" | "ADMIN" | "MEMBER";
+export type BotStatus = "ACTIVE" | "INACTIVE";
+export type ConversationStatus = "ACTIVE" | "CLOSED";
+/** Whether the visitor got what they came for. Independent of status. */
+export type ConversationResolution = "UNRESOLVED" | "RESOLVED" | "ESCALATED";
+export type WidgetPosition = "BOTTOM_RIGHT" | "BOTTOM_LEFT" | "TOP_RIGHT" | "TOP_LEFT";
+export type LauncherIcon = "CHAT" | "MESSAGE" | "HELP" | "SPARKLE";
+export type DocumentStatus = "PENDING" | "PROCESSING" | "INDEXED" | "FAILED";
+export type MessageRole = "USER" | "ASSISTANT";
+
+export interface AuthResponse {
+  token: string;
+  expiresAt: string;
+  role: MemberRole;
+}
+
+export interface UserSummary {
+  id: string;
+  name: string;
+  email: string;
+  createdAt: string;
+}
+
+export interface OrganizationSummary {
+  id: string;
+  name: string;
+  slug: string;
+  createdAt: string;
+}
+
+export interface CurrentUser {
+  user: UserSummary;
+  organization: OrganizationSummary;
+  role: MemberRole;
+}
+
+export interface Bot {
+  id: string;
+  organizationId: string;
+  name: string;
+  description: string | null;
+  status: BotStatus;
+  defaultLanguage: string;
+  systemPrompt: string | null;
+  primaryColor: string;
+  widgetPosition: WidgetPosition;
+  welcomeMessage: string;
+  fallbackMessage: string;
+  launcherIcon: LauncherIcon;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface KnowledgeBase {
+  id: string;
+  botId: string;
+  name: string;
+  documentCount: number;
+  createdAt: string;
+}
+
+export interface Document {
+  id: string;
+  knowledgeBaseId: string;
+  filename: string;
+  contentType: string;
+  sizeBytes: number;
+  status: DocumentStatus;
+  queryable: boolean;
+  errorMessage: string | null;
+  chunkCount: number | null;
+  pageCount: number | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface Conversation {
+  id: string;
+  botId: string;
+  visitorId: string | null;
+  title: string | null;
+  status: ConversationStatus;
+  resolution: ConversationResolution;
+  messageCount: number;
+  startedAt: string;
+  lastMessageAt: string | null;
+}
+
+export interface Citation {
+  marker: number;
+  documentId: string;
+  filename: string;
+  pageNumber: number | null;
+  snippet: string;
+  score: number;
+}
+
+export interface Message {
+  id: string;
+  conversationId: string;
+  role: MessageRole;
+  content: string;
+  citations: Citation[];
+  grounded: boolean | null;
+  model: string | null;
+  latencyMs: number | null;
+  createdAt: string;
+}
+
+export interface UsageDay {
+  date: string;
+  conversations: number;
+  /** Counts both sides of an exchange, so it is always twice `answers`. */
+  messages: number;
+  answers: number;
+  groundedAnswers: number;
+  ungroundedAnswers: number;
+  tokens: number;
+}
+
+export interface BotUsage {
+  from: string;
+  to: string;
+  days: UsageDay[];
+  totalConversations: number;
+  totalMessages: number;
+  totalAnswers: number;
+  groundedAnswers: number;
+  ungroundedAnswers: number;
+  totalTokens: number;
+  /** Null when the bot answered nothing in the range. Not zero. */
+  averageResponseMs: number | null;
+}
+
+
+/**
+ * A stored RAG evaluation run.
+ *
+ * Metric values are `number | null`, and the distinction matters: null means
+ * the dataset stated no expectation for that metric, which is not the same as
+ * scoring zero. Render null as "n/a".
+ */
+export interface RagEvaluation {
+  id: string;
+  botId: string;
+  dataset: string;
+  model: string;
+  startedAt: string;
+  finishedAt: string;
+  totalQuestions: number;
+  successful: number;
+  failed: number;
+  unmetExpectations: number;
+  metrics: Partial<Record<EvaluationMetric, number | null>>;
+  latency: Partial<Record<"mean_ms" | "p50_ms" | "p95_ms" | "max_ms", number>>;
+  cases: EvaluationCase[];
+}
+
+export type EvaluationMetric =
+  | "hit_at_k"
+  | "mrr"
+  | "source_recall"
+  | "source_precision"
+  | "answer_token_f1"
+  | "groundedness"
+  | "answer_rate"
+  | "abstention_accuracy";
+
+export interface EvaluationCase {
+  id: string;
+  question: string;
+  ok: boolean;
+  error?: string | null;
+  answer?: string;
+  abstained?: boolean;
+  expected_sources?: string[];
+  cited_sources?: string[];
+  hit_at_k?: number | null;
+  latency_ms?: number;
+}
+
+export interface Member {
+  userId: string;
+  name: string;
+  email: string;
+  role: MemberRole;
+  joinedAt: string;
+}
+
+export interface ConversationNote {
+  id: string;
+  authorId: string | null;
+  authorName: string;
+  body: string;
+  createdAt: string;
+}
+
+export interface ApiKey {
+  id: string;
+  botId: string;
+  name: string;
+  keyPrefix: string;
+  active: boolean;
+  lastUsedAt: string | null;
+  revokedAt: string | null;
+  createdAt: string;
+}
+
+export interface CreatedApiKey {
+  key: ApiKey;
+  /** Returned exactly once. Only a hash is stored, so it cannot be shown again. */
+  rawKey: string;
+  warning: string;
+}
+
+export interface AllowedDomain {
+  id: string;
+  botId: string;
+  domain: string;
+  createdAt: string;
+}
+
+export interface Page<T> {
+  items: T[];
+  page: number;
+  size: number;
+  totalItems: number;
+  totalPages: number;
+  hasNext: boolean;
+}
+
+// ------------------------------------------------------------------ token --
+
+/**
+ * The JWT lives in localStorage.
+ *
+ * An httpOnly cookie would resist XSS better, but it needs the API to set
+ * cookies cross-origin with credentials, and the backend deliberately does not
+ * enable that. This is the honest trade for a token-based API; the mitigation
+ * that matters is not rendering untrusted HTML, which nothing here does.
+ */
+const TOKEN_KEY = "intelliassist.token";
+
+export const tokenStore = {
+  get(): string | null {
+    if (typeof window === "undefined") return null;
+    try {
+      return localStorage.getItem(TOKEN_KEY);
+    } catch {
+      return null;
+    }
+  },
+  set(token: string) {
+    try {
+      localStorage.setItem(TOKEN_KEY, token);
+    } catch {
+      /* private mode: the session simply will not survive a reload */
+    }
+  },
+  clear() {
+    try {
+      localStorage.removeItem(TOKEN_KEY);
+    } catch {
+      /* nothing to do */
+    }
+  },
+};
+
+// ------------------------------------------------------------------ error --
+
+export class ApiError extends Error {
+  constructor(
+    readonly status: number,
+    message: string,
+    readonly fieldErrors?: Record<string, string>,
+  ) {
+    super(message);
+    this.name = "ApiError";
+  }
+
+  /** The session is gone or was never valid. */
+  get isUnauthorized() {
+    return this.status === 401;
+  }
+
+  /** The request never reached the server at all. */
+  get isUnreachable() {
+    return this.status === 0;
+  }
+}
+
+/**
+ * Turns a failed response into an ApiError.
+ *
+ * The backend returns a ProblemDetail-shaped body and deliberately omits stack
+ * traces and internal detail, so whatever `detail` says is safe to show.
+ */
+async function toError(response: Response): Promise<ApiError> {
+  let message = `Request failed (${response.status})`;
+  let fieldErrors: Record<string, string> | undefined;
+
+  try {
+    const body = await response.json();
+    message = body.detail ?? body.message ?? body.title ?? message;
+    if (body.errors && typeof body.errors === "object") {
+      fieldErrors = body.errors;
+    }
+  } catch {
+    // A non-JSON body (a proxy error page, say). The status alone is the
+    // most honest thing we can report.
+  }
+
+  return new ApiError(response.status, message, fieldErrors);
+}
+
+// ------------------------------------------------------------------ fetch --
+
+interface RequestOptions {
+  method?: string;
+  body?: unknown;
+  /** Multipart uploads set their own content type via the boundary. */
+  formData?: FormData;
+  signal?: AbortSignal;
+}
+
+async function request<T>(path: string, options: RequestOptions = {}): Promise<T> {
+  const token = tokenStore.get();
+  const headers: Record<string, string> = {};
+
+  if (token) headers.Authorization = `Bearer ${token}`;
+  if (options.body !== undefined) headers["Content-Type"] = "application/json";
+
+  let response: Response;
+  try {
+    response = await fetch(`${BASE_URL}/api/v1${path}`, {
+      method: options.method ?? (options.body || options.formData ? "POST" : "GET"),
+      headers,
+      body: options.formData ?? (options.body !== undefined ? JSON.stringify(options.body) : undefined),
+      signal: options.signal,
+    });
+  } catch (cause) {
+    // fetch rejects rather than resolving when the request never reached the
+    // server: connection refused, DNS failure, CORS. The browser deliberately
+    // withholds which, so the message names the likeliest cause instead of
+    // blaming whatever the caller happened to be doing -- "could not create
+    // the account" sends someone hunting through a form that was fine.
+    if (cause instanceof DOMException && cause.name === "AbortError") throw cause;
+    throw new ApiError(
+      0,
+      `Cannot reach the API at ${BASE_URL}. Is the backend running? ` +
+        "Start it with: docker compose --profile app up -d",
+    );
+  }
+
+  if (!response.ok) throw await toError(response);
+
+  // 204, and any other empty success.
+  if (response.status === 204 || response.headers.get("Content-Length") === "0") {
+    return undefined as T;
+  }
+  return (await response.json()) as T;
+}
+
+// -------------------------------------------------------------------- api --
+
+export const api = {
+  auth: {
+    register: (body: {
+      name: string;
+      email: string;
+      password: string;
+      organizationName: string;
+    }) => request<AuthResponse>("/auth/register", { body }),
+
+    login: (body: { email: string; password: string }) =>
+      request<AuthResponse>("/auth/login", { body }),
+
+    me: () => request<CurrentUser>("/auth/me"),
+  },
+
+  bots: {
+    list: (page = 0, size = 50) =>
+      request<Page<Bot>>(`/bots?page=${page}&size=${size}`),
+    get: (botId: string) => request<Bot>(`/bots/${botId}`),
+
+    create: (body: {
+      name: string;
+      description?: string;
+      defaultLanguage?: string;
+      systemPrompt?: string;
+    }) => request<Bot>("/bots", { body }),
+
+    update: (
+      botId: string,
+      body: {
+        name?: string;
+        description?: string;
+        status?: BotStatus;
+        defaultLanguage?: string;
+        systemPrompt?: string;
+      },
+    ) => request<Bot>(`/bots/${botId}`, { method: "PUT", body }),
+
+    remove: (botId: string) => request<void>(`/bots/${botId}`, { method: "DELETE" }),
+
+    /**
+     * The Customization screen's save.
+     *
+     * PATCH, and every field optional: the screen saves one section at a time,
+     * and an omitted field must be left alone rather than blanked.
+     */
+    updateAppearance: (
+      botId: string,
+      body: {
+        primaryColor?: string;
+        widgetPosition?: WidgetPosition;
+        welcomeMessage?: string;
+        fallbackMessage?: string;
+        launcherIcon?: LauncherIcon;
+      },
+    ) => request<Bot>(`/bots/${botId}/appearance`, { method: "PATCH", body }),
+  },
+
+  knowledge: {
+    /** A bot has exactly one knowledge base, so this returns it rather than a list. */
+    getBase: (botId: string) => request<KnowledgeBase>(`/bots/${botId}/knowledge`),
+
+    createBase: (botId: string, body: { name: string }) =>
+      request<KnowledgeBase>(`/bots/${botId}/knowledge`, { body }),
+
+    listDocuments: (botId: string, page = 0, size = 50) =>
+      request<Page<Document>>(`/bots/${botId}/documents?page=${page}&size=${size}`),
+
+    /**
+     * Accepted with 202: indexing happens on a worker, so the document arrives
+     * PENDING and the caller polls until it is INDEXED or FAILED.
+     */
+    upload: (botId: string, file: File) => {
+      const formData = new FormData();
+      formData.append("file", file);
+      return request<Document>(`/bots/${botId}/documents`, { formData });
+    },
+
+    getDocument: (documentId: string) => request<Document>(`/documents/${documentId}`),
+
+    removeDocument: (documentId: string) =>
+      request<void>(`/documents/${documentId}`, { method: "DELETE" }),
+  },
+
+  conversations: {
+    list: (botId: string, page = 0, size = 20) =>
+      request<Page<Conversation>>(`/bots/${botId}/conversations?page=${page}&size=${size}`),
+
+    get: (conversationId: string) => request<Conversation>(`/conversations/${conversationId}`),
+
+    messages: (conversationId: string) =>
+      request<Message[]>(`/conversations/${conversationId}/messages`),
+
+    start: (botId: string, body: { visitorId?: string } = {}) =>
+      request<Conversation>(`/bots/${botId}/conversations`, { body }),
+
+    send: (conversationId: string, content: string) =>
+      request<{ userMessage: Message; assistantMessage: Message }>(
+        `/conversations/${conversationId}/messages`,
+        { body: { content } },
+      ),
+
+    close: (conversationId: string) =>
+      request<Conversation>(`/conversations/${conversationId}/close`, { method: "POST" }),
+
+    /** Records how it turned out. Does not close the conversation. */
+    resolve: (conversationId: string, resolution: ConversationResolution) =>
+      request<Conversation>(`/conversations/${conversationId}/resolution`, {
+        method: "PATCH",
+        body: { resolution },
+      }),
+
+    notes: (conversationId: string) =>
+      request<ConversationNote[]>(`/conversations/${conversationId}/notes`),
+
+    addNote: (conversationId: string, body: string) =>
+      request<ConversationNote>(`/conversations/${conversationId}/notes`, { body: { body } }),
+  },
+
+  members: {
+    /** Always the caller's own organization; there is no id to pass. */
+    list: () => request<Member[]>("/members"),
+  },
+
+  evaluation: {
+    /**
+     * The latest run, or null when the bot has never been evaluated.
+     *
+     * The API answers 204 in that case, which `request` returns as undefined.
+     */
+    latest: (botId: string) =>
+      request<RagEvaluation | undefined>(`/bots/${botId}/analytics/rag-evaluation`).then(
+        (result) => result ?? null,
+      ),
+  },
+
+  usage: {
+    forBot: (botId: string, from?: string, to?: string) => {
+      const query = new URLSearchParams();
+      if (from) query.set("from", from);
+      if (to) query.set("to", to);
+      const suffix = query.toString() ? `?${query}` : "";
+      return request<BotUsage>(`/bots/${botId}/usage${suffix}`);
+    },
+  },
+
+  credentials: {
+    listKeys: (botId: string) => request<ApiKey[]>(`/bots/${botId}/api-keys`),
+
+    createKey: (botId: string, body: { name: string }) =>
+      request<CreatedApiKey>(`/bots/${botId}/api-keys`, { body }),
+
+    revokeKey: (keyId: string) => request<void>(`/api-keys/${keyId}`, { method: "DELETE" }),
+
+    listDomains: (botId: string) => request<AllowedDomain[]>(`/bots/${botId}/domains`),
+
+    addDomain: (botId: string, body: { domain: string }) =>
+      request<AllowedDomain>(`/bots/${botId}/domains`, { body }),
+
+    removeDomain: (domainId: string) =>
+      request<void>(`/domains/${domainId}`, { method: "DELETE" }),
+  },
+};
+
+/**
+ * Streams an answer in the dashboard's own test chat.
+ *
+ * `EventSource` is not usable: it cannot POST and cannot set an Authorization
+ * header, so the SSE frames are parsed out of the fetch body by hand. The frame
+ * format matches `StreamingChatService.send`.
+ */
+export async function streamMessage(
+  conversationId: string,
+  content: string,
+  handlers: {
+    onToken: (text: string) => void;
+    onCitations: (citations: Citation[]) => void;
+    onError: (message: string) => void;
+    onDone: () => void;
+  },
+  signal?: AbortSignal,
+): Promise<void> {
+  const response = await fetch(
+    `${BASE_URL}/api/v1/conversations/${conversationId}/messages/stream`,
+    {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${tokenStore.get() ?? ""}`,
+      },
+      body: JSON.stringify({ content }),
+      signal,
+    },
+  );
+
+  if (!response.ok) throw await toError(response);
+  if (!response.body) throw new ApiError(500, "The server sent no response body");
+
+  const reader = response.body.getReader();
+  const decoder = new TextDecoder();
+  let buffer = "";
+
+  for (;;) {
+    const { done, value } = await reader.read();
+    if (done) break;
+
+    buffer += decoder.decode(value, { stream: true });
+
+    // Frames are separated by a blank line. A partial frame stays in the
+    // buffer until the rest of it arrives.
+    const frames = buffer.split("\n\n");
+    buffer = frames.pop() ?? "";
+
+    for (const frame of frames) {
+      let name: string | null = null;
+      let data: unknown = null;
+
+      for (const line of frame.split("\n")) {
+        if (line.startsWith("event: ")) name = line.slice(7).trim();
+        else if (line.startsWith("data: ")) {
+          try {
+            data = JSON.parse(line.slice(6));
+          } catch {
+            data = null;
+          }
+        }
+      }
+
+      if (!name || data === null) continue;
+      const payload = data as Record<string, unknown>;
+
+      if (name === "token") handlers.onToken((payload.text as string) ?? "");
+      else if (name === "citations")
+        handlers.onCitations((payload.citations as Citation[]) ?? []);
+      else if (name === "error")
+        handlers.onError((payload.message as string) ?? "The assistant could not answer.");
+      else if (name === "done") handlers.onDone();
+    }
+  }
+}
