@@ -1,0 +1,25 @@
+# Ignore rules for the backend image only.
+#
+# BuildKit prefers <dockerfile>.dockerignore over the context root's
+# .dockerignore. That root file excludes backend/ and frontend/ because it was
+# written for the Python service, whose context is also the repo root -- and
+# with the backend now building from the root (so widget/ is reachable), those
+# rules would exclude the very source being built.
+#
+# So: everything out, then the two directories this image needs back in.
+*
+!backend/.mvn/
+!backend/mvnw
+!backend/pom.xml
+!backend/src/
+!widget/src/
+!widget/package.json
+!widget/package-lock.json
+!widget/tsconfig.json
+!widget/build.mjs
+
+# Build output and local state that must never reach the image.
+**/target/
+**/node_modules/
+**/.git/
+**/__pycache__/

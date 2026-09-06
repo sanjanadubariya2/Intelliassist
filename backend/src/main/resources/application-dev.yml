@@ -1,0 +1,21 @@
+# Local development. Never active in a deployment.
+spring:
+  jpa:
+    show-sql: false
+    properties:
+      hibernate:
+        format_sql: true
+
+logging:
+  level:
+    com.intelliassist.backend: DEBUG
+    # Uncomment when diagnosing a query; far too noisy to leave on.
+    # org.hibernate.SQL: DEBUG
+    # org.hibernate.orm.jdbc.bind: TRACE
+
+management:
+  endpoint:
+    health:
+      # Convenient locally; `when-authorized` everywhere else, since the detail
+      # names internal components and their failure reasons.
+      show-details: always

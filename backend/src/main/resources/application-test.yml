@@ -1,0 +1,31 @@
+# Test profile.
+#
+# The datasource is deliberately absent: integration tests supply it from a
+# Testcontainers Postgres via @DynamicPropertySource, so tests can never
+# accidentally run against a developer's real database.
+spring:
+  jpa:
+    hibernate:
+      ddl-auto: validate
+  flyway:
+    enabled: true
+    clean-disabled: true
+
+intelliassist:
+  ai-service:
+    base-url: http://localhost:9999
+    # Tests must never reach the real AI service. This is a placeholder for a
+    # stubbed server, not a credential.
+    api-key: test-key-not-a-secret
+  jwt:
+    # Fixed test key, never used outside tests. Long enough for HMAC-SHA256.
+    secret: test-only-signing-key-not-a-real-secret-at-least-32-bytes
+    expiration: 1h
+    issuer: intelliassist
+  cors:
+    allowed-origins: http://localhost:3000
+
+logging:
+  level:
+    root: WARN
+    com.intelliassist.backend: INFO

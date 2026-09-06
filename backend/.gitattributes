@@ -1,0 +1,5 @@
+# The Maven wrapper is executed by /bin/sh inside the Docker build. With CRLF
+# endings the shebang resolves to "/bin/sh\r", which does not exist, and the
+# build fails with a bare exit code 127. Force LF regardless of core.autocrlf.
+mvnw text eol=lf
+*.sh text eol=lf

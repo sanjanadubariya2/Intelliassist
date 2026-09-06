@@ -1,0 +1,19 @@
+target/
+!.mvn/wrapper/maven-wrapper.jar
+
+# --- secrets ---
+.env
+.env.*
+!.env.example
+
+# --- editors ---
+.idea/
+*.iml
+.vscode/
+.classpath
+.project
+.settings/
+
+# --- os ---
+.DS_Store
+Thumbs.db

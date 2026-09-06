@@ -1,0 +1,51 @@
+# Production profile.
+#
+# Everything here is a tightening of the defaults. No value is invented: each
+# one closes something that is deliberately open during development.
+
+spring:
+  jpa:
+    show-sql: false
+    properties:
+      hibernate:
+        format_sql: false
+
+server:
+  # Do not advertise the server product in responses; it tells an attacker
+  # which CVEs to try first and tells a legitimate client nothing.
+  server-header: ""
+  tomcat:
+    # Behind a reverse proxy, so the client IP and scheme arrive in headers.
+    # Without this every log line records the proxy's address.
+    remoteip:
+      remote-ip-header: X-Forwarded-For
+      protocol-header: X-Forwarded-Proto
+
+management:
+  endpoints:
+    web:
+      exposure:
+        # Health only. `info` can carry build and git detail that is of more
+        # use to someone probing than to an operator who has the deploy logs.
+        include: health
+  endpoint:
+    health:
+      # Never expose component detail publicly: it names internal dependencies
+      # and their failure reasons.
+      show-details: never
+
+# The API catalogue is a map of every endpoint, DTO and validation rule.
+# Useful while building, gratuitous once the API is stable.
+springdoc:
+  api-docs:
+    enabled: false
+  swagger-ui:
+    enabled: false
+
+logging:
+  level:
+    root: WARN
+    com.intelliassist.backend: INFO
+    # Hibernate logs bind parameters at TRACE, which would put customer data
+    # and password hashes into the log stream.
+    org.hibernate.SQL: OFF
