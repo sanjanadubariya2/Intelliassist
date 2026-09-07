@@ -270,8 +270,15 @@ widget/         TypeScript · the embeddable chat widget.
 
 compose.yaml    wires them together for local development
 docker/         shared infrastructure (Postgres init)
-docs/           cross-cutting documentation
+docs/           cross-cutting documentation — start at docs/README.md
 ```
+
+Each folder has its own README covering how to run it, how it is laid out, and
+the decisions that are load-bearing:
+[ai-service](ai-service/README.md) ·
+[backend](backend/README.md) ·
+[frontend](frontend/README.md) ·
+[widget](widget/README.md)
 
 The dependency direction is one-way and deliberate:
 

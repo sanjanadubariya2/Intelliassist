@@ -79,3 +79,79 @@ jobs:
       - run: uv sync --all-groups
       - name: Integration tests
         run: uv run pytest -m integration
+
+  backend:
+    name: backend · 258 tests
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: backend
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "21"
+          cache: maven
+
+      # Testcontainers starts its own Postgres, so no `services:` block here.
+      # The tests need a real database with real constraints -- an in-memory
+      # stand-in would not catch the schema drift that ddl-auto: validate does.
+      - name: Test
+        run: ./mvnw -B clean test
+
+      - name: Package
+        run: ./mvnw -B clean package -DskipTests
+
+  frontend:
+    name: dashboard · lint · types · build
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: frontend
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - run: npm ci
+
+      - name: Lint
+        run: npm run lint
+
+      - name: Types
+        run: npm run typecheck
+
+      - name: Build
+        # Catches what lint and tsc cannot: a server/client boundary mistake,
+        # or a page that fails to prerender.
+        run: npm run build
+
+  widget:
+    name: widget · types · bundle
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: widget
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: widget/package-lock.json
+
+      - run: npm ci
+
+      - name: Types
+        run: npm run typecheck
+
+      - name: Bundle
+        run: npm run build
