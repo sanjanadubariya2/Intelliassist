@@ -17,6 +17,7 @@ import {
   Empty,
   ErrorNote,
   Loading,
+  PageHeader,
   ResolutionBadge,
   Select,
   cx,
@@ -78,9 +79,11 @@ function Feed() {
   const params = useSearchParams();
 
   const [botId, setBotId] = useState<string | "all">("all");
-  // Seeded from the query string so the topbar's escalations bell can deep-link.
+  // Seeded from the query string so other screens can deep-link to a filter.
+  // Validated: an unknown value used to select no tab and match nothing.
+  const requested = params.get("resolution");
   const [filter, setFilter] = useState<FilterId>(
-    (params.get("resolution") as FilterId) ?? "all",
+    FILTERS.find((entry) => entry.id === requested)?.id ?? "all",
   );
   const [term, setTerm] = useState("");
 
@@ -106,10 +109,10 @@ function Feed() {
 
   return (
     <>
-      <div className="mb-5">
-        <h1 className="text-xl font-semibold tracking-tight">Conversations</h1>
-        <p className="mt-0.5 text-[13px] text-muted">View and manage all conversations.</p>
-      </div>
+      <PageHeader
+        title="Conversations"
+        description="Every conversation across your bots. Escalated ones also appear in the Handoff Inbox."
+      />
 
       <Card>
         <CardHeader
@@ -141,7 +144,7 @@ function Feed() {
               onChange={(event) => setTerm(event.target.value)}
               placeholder="Search conversations…"
               aria-label="Search conversations"
-              className="w-full rounded-lg border border-line py-2 pl-9 pr-3 text-sm placeholder:text-faint focus:border-accent focus:outline-none focus:ring-2 focus:ring-accent/20"
+              className="w-full rounded-xl border border-line py-2 pl-9 pr-3 text-sm placeholder:text-faint focus:border-clay/60 focus:outline-none focus:ring-2 focus:ring-clay/15"
             />
           </div>
 
@@ -153,7 +156,7 @@ function Feed() {
                 className={cx(
                   "rounded-lg px-3 py-1.5 text-[13px] transition-colors",
                   filter === entry.id
-                    ? "bg-accent-soft font-medium text-accent"
+                    ? "bg-clay-soft font-medium text-ink"
                     : "text-muted hover:bg-canvas hover:text-ink",
                 )}
               >
@@ -192,7 +195,7 @@ function Feed() {
               <li key={conversation.id}>
                 <Link
                   href={`/conversations/${conversation.id}`}
-                  className="flex items-center justify-between gap-4 px-5 py-3.5 hover:bg-canvas"
+                  className="flex items-center justify-between gap-4 px-5 py-3.5 hover:bg-cream"
                 >
                   <div className="min-w-0">
                     <p className="truncate text-sm font-medium">
@@ -206,6 +209,11 @@ function Feed() {
                     </p>
                   </div>
                   <div className="flex shrink-0 items-center gap-3">
+                    {conversation.assigneeName && (
+                      <span className="hidden text-[12px] text-muted sm:inline">
+                        {conversation.assigneeName}
+                      </span>
+                    )}
                     <ResolutionBadge resolution={conversation.resolution} />
                     <span className="w-16 text-right text-[12px] text-faint">
                       {formatRelative(conversation.lastMessageAt ?? conversation.startedAt)}

@@ -14,6 +14,7 @@ import com.intelliassist.backend.entity.Organization;
 import com.intelliassist.backend.entity.OrganizationMember;
 import com.intelliassist.backend.entity.User;
 import com.intelliassist.backend.integration.ai.AiServiceClient;
+import com.intelliassist.backend.integration.ai.dto.AiCitation;
 import com.intelliassist.backend.integration.ai.dto.AiRagQueryResponse;
 import com.intelliassist.backend.repository.BotRepository;
 import com.intelliassist.backend.repository.ConversationRepository;
@@ -104,7 +105,19 @@ class UsageIntegrationTest extends AbstractIntegrationTest {
                                 UUID.randomUUID(),
                                 "q",
                                 grounded ? "Answer [S1]." : "I don't have information about that.",
-                                List.of(),
+                                // A grounded answer cites what it used; that is
+                                // what the backend now counts as grounded.
+                                grounded
+                                        ? List.of(
+                                                new AiCitation(
+                                                        1,
+                                                        UUID.randomUUID(),
+                                                        UUID.randomUUID(),
+                                                        "faq.pdf",
+                                                        1,
+                                                        "snippet",
+                                                        0.9))
+                                        : List.of(),
                                 grounded,
                                 "m",
                                 false,
@@ -179,6 +192,34 @@ class UsageIntegrationTest extends AbstractIntegrationTest {
 
         var record = usageRepository.findByBotIdAndUsageDate(botA, LocalDate.now()).orElseThrow();
         assertThat(record.getUngroundedCount()).isZero();
+    }
+
+    /**
+     * Retrieval cleared the threshold, so the AI service says grounded, but the
+     * model declined and cited nothing. That is a gap in the corpus, and
+     * counting it as grounded hid every such question from insights.
+     */
+    @Test
+    void anUncitedAnswerIsNotGroundedWhateverTheServiceSays() throws Exception {
+        Mockito.when(aiServiceClient.query(Mockito.any(), Mockito.anyString(), Mockito.any()))
+                .thenReturn(
+                        new AiRagQueryResponse(
+                                UUID.randomUUID(),
+                                UUID.randomUUID(),
+                                "q",
+                                "I don't have information about that in the knowledge base.",
+                                List.of(),
+                                true,
+                                "m",
+                                false,
+                                new AiRagQueryResponse.Usage(100, 20, 50, 3, 0),
+                                new AiRagQueryResponse.Timings(1, 0, 1, 2)));
+
+        UUID conversationId = startConversation(tokenA, botA);
+        sendMessage(tokenA, conversationId);
+
+        var record = usageRepository.findByBotIdAndUsageDate(botA, LocalDate.now()).orElseThrow();
+        assertThat(record.getUngroundedCount()).isEqualTo(1);
     }
 
     @Test

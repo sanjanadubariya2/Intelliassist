@@ -69,6 +69,24 @@ public class Conversation {
     @Column(nullable = false, length = 20)
     private ConversationResolution resolution = ConversationResolution.UNRESOLVED;
 
+    /**
+     * The teammate handling it once a person is needed.
+     *
+     * <p>Null means it sits in the shared queue. Lazy, and only ever read inside
+     * a transaction, because almost every conversation never has one.
+     */
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "assignee_id")
+    private User assignee;
+
+    /** First escalation. Never cleared, so a resolved handoff stays countable. */
+    @Column(name = "escalated_at")
+    private Instant escalatedAt;
+
+    /** Most recent resolution. Cleared when the conversation is reopened. */
+    @Column(name = "resolved_at")
+    private Instant resolvedAt;
+
     @Column(name = "started_at", nullable = false, updatable = false)
     private Instant startedAt;
 
@@ -200,6 +218,44 @@ public class Conversation {
      * well keep typing after an operator has judged the outcome.
      */
     public void resolveAs(ConversationResolution resolution) {
+        resolveAs(resolution, Instant.now());
+    }
+
+    /**
+     * As {@link #resolveAs(ConversationResolution)}, with the moment supplied.
+     *
+     * <p>Escalation is stamped once and kept: a conversation that was handed to
+     * a person and then resolved is still a handoff, and the inbox measures how
+     * long it took. Resolution is stamped each time and cleared on reopen.
+     */
+    public void resolveAs(ConversationResolution resolution, Instant at) {
         this.resolution = resolution;
+        switch (resolution) {
+            case ESCALATED -> {
+                if (escalatedAt == null) {
+                    escalatedAt = at;
+                }
+                resolvedAt = null;
+            }
+            case RESOLVED -> resolvedAt = at;
+            case UNRESOLVED -> resolvedAt = null;
+        }
+    }
+
+    public User getAssignee() {
+        return assignee;
+    }
+
+    /** Null returns it to the shared queue. */
+    public void assignTo(User assignee) {
+        this.assignee = assignee;
+    }
+
+    public Instant getEscalatedAt() {
+        return escalatedAt;
+    }
+
+    public Instant getResolvedAt() {
+        return resolvedAt;
     }
 }

@@ -81,7 +81,7 @@ jobs:
         run: uv run pytest -m integration
 
   backend:
-    name: backend · 258 tests
+    name: backend · 275 tests
     runs-on: ubuntu-latest
     defaults:
       run:
@@ -127,6 +127,10 @@ jobs:
 
       - name: Types
         run: npm run typecheck
+
+      - name: Unit tests
+        # Ask Intelli's request parser. Node's built-in runner, no extra deps.
+        run: npm test
 
       - name: Build
         # Catches what lint and tsc cannot: a server/client boundary mistake,

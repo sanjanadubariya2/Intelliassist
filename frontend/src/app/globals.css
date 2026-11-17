@@ -1,39 +1,50 @@
 @import "tailwindcss";
 
 /*
- * The palette from the design: a violet accent on near-white, with a single
- * ink colour for text and one muted grey for everything secondary. Defined as
- * theme tokens so the components read `bg-surface` rather than a hex code
- * repeated eighty times.
+ * The palette: a warm cream canvas, a deep forest green for primary actions,
+ * and terracotta for emphasis, with one warm ink for text. Defined as theme
+ * tokens so components read `bg-surface` rather than a hex code repeated
+ * eighty times, and so a palette change is one file.
+ *
+ * The token names predate this palette and are kept on purpose: `accent` is
+ * still "the colour of the primary action", whatever that colour is.
  */
 @theme {
-  --color-accent: #7c5aed;
-  --color-accent-soft: #f1ecfe;
-  --color-accent-strong: #6a46e0;
+  --font-sans: var(--font-inter), ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+  --font-display: var(--font-fraunces), ui-serif, Georgia, "Times New Roman", serif;
 
-  --color-canvas: #f6f6fb;
+  /* Primary action: forest green. */
+  --color-accent: #1f4b3b;
+  --color-accent-strong: #163a2d;
+  --color-accent-soft: #e6efe8;
+
+  /* Emphasis: terracotta. Highlights, the active nav item, "new" markers. */
+  --color-clay: #c0583a;
+  --color-clay-strong: #a5462b;
+  --color-clay-soft: #fbe8de;
+
+  /* Supporting greens for illustration and quiet states. */
+  --color-sage: #7e9c7b;
+  --color-sage-soft: #edf2ea;
+
+  --color-canvas: #fbf6f0;
   --color-surface: #ffffff;
-  --color-line: #e9e9f2;
+  --color-cream: #fdf9f4;
+  --color-line: #eee2d5;
 
-  --color-ink: #17172b;
-  --color-muted: #6b6b85;
-  --color-faint: #9a9ab0;
+  --color-ink: #2a211c;
+  --color-muted: #75665c;
+  --color-faint: #a8998e;
 
-  /* The sidebar is a dark navy rail against light content. Its own tokens,
-     because on that surface "muted text" is a pale slate rather than the grey
-     that reads as muted on white. */
-  --color-rail: #141a2e;
-  --color-rail-line: #242c45;
-  --color-rail-text: #e8e9f2;
-  --color-rail-muted: #8b93ad;
-  --color-rail-hover: #1e2740;
+  --color-ok: #2f7d4f;
+  --color-ok-soft: #e5f2e9;
+  --color-warn: #a86f12;
+  --color-warn-soft: #fbf0da;
+  --color-bad: #c2412d;
+  --color-bad-soft: #fce8e3;
 
-  --color-ok: #1a9d6b;
-  --color-ok-soft: #e6f7f0;
-  --color-warn: #b8860b;
-  --color-warn-soft: #fdf6e3;
-  --color-bad: #d0453b;
-  --color-bad-soft: #fdeceb;
+  --shadow-soft: 0 1px 2px rgb(42 33 28 / 0.04), 0 8px 24px -12px rgb(42 33 28 / 0.12);
+  --shadow-lift: 0 2px 4px rgb(42 33 28 / 0.05), 0 18px 40px -16px rgb(42 33 28 / 0.22);
 }
 
 html,
@@ -43,16 +54,125 @@ body {
 }
 
 body {
+  font-family: var(--font-sans);
   -webkit-font-smoothing: antialiased;
 }
 
 /* A visible focus ring everywhere, rather than the browser default that some
    resets quietly remove. Keyboard users are the ones who need it. */
 :focus-visible {
-  outline: 2px solid var(--color-accent);
+  outline: 2px solid var(--color-clay);
   outline-offset: 2px;
 }
 
 ::selection {
-  background: var(--color-accent-soft);
+  background: var(--color-clay-soft);
+}
+
+/* The hand-drawn underline under emphasised words in display headings. */
+.squiggle {
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 200 12' preserveAspectRatio='none'%3E%3Cpath d='M2 8 C 50 2, 110 2, 198 7' fill='none' stroke='%23c0583a' stroke-width='3' stroke-linecap='round'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: 0 100%;
+  background-size: 100% 0.28em;
+  padding-bottom: 0.12em;
+}
+
+/* A soft highlighter stroke behind a word. */
+.highlight {
+  background: linear-gradient(transparent 55%, var(--color-clay-soft) 55%, var(--color-clay-soft) 92%, transparent 92%);
+}
+
+@keyframes rise {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+.animate-rise {
+  animation: rise 0.35s ease-out both;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .animate-rise {
+    animation: none;
+  }
+}
+
+/*
+ * Landing page motion. Everything is scoped to `.ia-motion` (the welcome page
+ * root) so none of it leaks into the dashboard, and all of it switches off
+ * for visitors who ask their system for less motion.
+ */
+@keyframes ia-bob { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-12px); } }
+@keyframes ia-wave { 0%, 60%, 100% { transform: rotate(0); } 10%, 30% { transform: rotate(-22deg); } 20%, 40% { transform: rotate(10deg); } }
+@keyframes ia-blink { 0%, 92%, 100% { transform: scaleY(1); } 95% { transform: scaleY(0.1); } }
+@keyframes ia-pulse { 0%, 100% { transform: scale(1); opacity: 1; } 50% { transform: scale(1.35); opacity: 0.7; } }
+@keyframes ia-shadow { 0%, 100% { transform: scaleX(1); opacity: 0.14; } 50% { transform: scaleX(0.8); opacity: 0.08; } }
+@keyframes ia-float {
+  0%, 100% { transform: translate(0, 0) rotate(var(--r, 0deg)); }
+  50% { transform: translate(var(--dx, 8px), var(--dy, -16px)) rotate(calc(var(--r, 0deg) + 8deg)); }
+}
+@keyframes ia-spin { to { transform: rotate(360deg); } }
+@keyframes ia-morph {
+  0%, 100% { border-radius: 42% 58% 63% 37% / 45% 41% 59% 55%; }
+  50% { border-radius: 61% 39% 38% 62% / 56% 62% 38% 44%; }
+}
+@keyframes ia-marquee { to { transform: translateX(-50%); } }
+@keyframes ia-fly {
+  0% { transform: translate(0, 0) rotate(-8deg) scale(1); opacity: 0; }
+  10%, 70% { opacity: 1; }
+  100% { transform: translate(var(--tx), var(--ty)) rotate(14deg) scale(0.25); opacity: 0; }
+}
+@keyframes ia-dash { to { stroke-dashoffset: -40; } }
+@keyframes ia-typing { 0%, 80%, 100% { transform: translateY(0); opacity: 0.4; } 40% { transform: translateY(-5px); opacity: 1; } }
+@keyframes ia-pop { from { opacity: 0; transform: translateY(14px) scale(0.92); } to { opacity: 1; transform: none; } }
+@keyframes ia-twinkle { 0%, 100% { transform: scale(0.6) rotate(0); opacity: 0.5; } 50% { transform: scale(1.1) rotate(45deg); opacity: 1; } }
+@keyframes ia-grow { from { transform: scaleX(0); } to { transform: scaleX(1); } }
+@keyframes ia-ring { from { stroke-dashoffset: 314; } to { stroke-dashoffset: 69; } }
+@keyframes ia-progress { from { transform: scaleX(0); } to { transform: scaleX(1); } }
+
+.ia-motion .ia-bob { animation: ia-bob 3.6s ease-in-out infinite; }
+.ia-motion .ia-wave { transform-box: view-box; transform-origin: 196px 120px; animation: ia-wave 2.8s ease-in-out infinite; }
+.ia-motion .ia-blink { transform-box: fill-box; transform-origin: center; animation: ia-blink 5s infinite; }
+.ia-motion .ia-pulse { transform-box: fill-box; transform-origin: center; animation: ia-pulse 1.8s ease-in-out infinite; }
+.ia-motion .ia-shadow { transform-box: fill-box; transform-origin: center; animation: ia-shadow 3.6s ease-in-out infinite; }
+.ia-motion .ia-float { animation: ia-float 7s ease-in-out infinite; }
+.ia-motion .ia-spin { animation: ia-spin 26s linear infinite; }
+.ia-motion .ia-morph { animation: ia-morph 12s ease-in-out infinite; }
+.ia-motion .ia-twinkle { animation: ia-twinkle 2.6s ease-in-out infinite; }
+.ia-motion .ia-marquee { animation: ia-marquee 30s linear infinite; }
+.ia-motion .ia-fly { animation: ia-fly 4.5s cubic-bezier(0.5, 0, 0.6, 1) infinite; }
+.ia-motion .ia-dash { stroke-dasharray: 8 12; animation: ia-dash 1.2s linear infinite; }
+.ia-motion .ia-typing { animation: ia-typing 1.2s infinite; }
+.ia-motion .ia-pop { animation: ia-pop 0.5s cubic-bezier(0.3, 1.5, 0.5, 1) both; }
+
+/* The reading-progress bar and scroll reveals need scroll-driven animations.
+   Browsers without them simply show everything, unanimated. */
+.ia-progress { transform: scaleX(0); transform-origin: left; }
+@supports (animation-timeline: view()) {
+  .ia-motion .ia-reveal { animation: ia-pop linear both; animation-timeline: view(); animation-range: entry 5% cover 28%; }
+  .ia-motion .ia-reveal-2 { animation: ia-pop linear both; animation-timeline: view(); animation-range: entry 25% cover 38%; }
+  .ia-motion .ia-reveal-3 { animation: ia-pop linear both; animation-timeline: view(); animation-range: entry 45% cover 48%; }
+  .ia-motion .ia-grow { transform-origin: left; animation: ia-grow linear both; animation-timeline: view(); animation-range: entry 10% cover 40%; }
+  .ia-motion .ia-ring { animation: ia-ring linear both; animation-timeline: view(); animation-range: entry 10% cover 45%; }
+  .ia-motion .ia-progress { animation: ia-progress linear both; animation-timeline: scroll(root); }
+}
+@supports not (animation-timeline: view()) {
+  .ia-progress { display: none; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .ia-motion *,
+  .ia-motion *::before,
+  .ia-motion *::after {
+    animation: none !important;
+    transition: none !important;
+  }
+  .ia-progress { display: none; }
 }

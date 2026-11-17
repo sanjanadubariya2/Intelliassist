@@ -15,6 +15,8 @@ import com.intelliassist.backend.integration.ai.dto.AiDocumentResponse;
 import com.intelliassist.backend.integration.ai.dto.AiKnowledgeBaseResponse;
 import com.intelliassist.backend.security.AuthenticatedUser;
 import java.io.IOException;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.UUID;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -234,8 +236,36 @@ public class KnowledgeService {
             AuthenticatedUser caller, UUID botId, Pageable pageable) {
 
         store.requireBot(botId, caller.organizationId());
-        return store.listDocuments(botId, caller.organizationId(), pageable);
+        PageResponse<DocumentResponse> page =
+                store.listDocuments(botId, caller.organizationId(), pageable);
+
+        // The dashboard watches uploads by polling this list, not the single
+        // document endpoint. Without reconciling here too, a list stayed on
+        // PENDING forever while the AI service had long since indexed the file,
+        // and the dashboard polled it indefinitely. Only documents still in
+        // flight are refreshed, and only a bounded number per request, so the
+        // cost tracks work in progress rather than corpus size.
+        int budget = MAX_REFRESHES_PER_LIST;
+        List<DocumentResponse> items = new ArrayList<>(page.items().size());
+        for (DocumentResponse item : page.items()) {
+            if (budget > 0 && item.status().isInProgress()) {
+                budget--;
+                items.add(getDocument(caller, item.id()));
+            } else {
+                items.add(item);
+            }
+        }
+        return new PageResponse<>(
+                items,
+                page.page(),
+                page.size(),
+                page.totalItems(),
+                page.totalPages(),
+                page.hasNext());
     }
+
+    /** Status refreshes one list request may trigger against the AI service. */
+    private static final int MAX_REFRESHES_PER_LIST = 10;
 
     /**
      * Deletes a document from the AI service and then from here.

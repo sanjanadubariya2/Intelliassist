@@ -136,7 +136,13 @@ public class ChatService {
                 aiServiceClient.query(context.aiKnowledgeBaseId(), question, history);
         int latencyMs = (int) ((System.nanoTime() - startedAt) / 1_000_000);
 
-        if (!response.grounded()) {
+        List<MessageCitation> citations = toCitations(response);
+        // Grounded only if it cites a source: the AI service says grounded
+        // when retrieval cleared its threshold, but the model may still have
+        // declined, and an uncited refusal is a gap in the corpus, not an answer.
+        boolean grounded = response.grounded() && !citations.isEmpty();
+
+        if (!grounded) {
             // A normal outcome, not a failure: retrieval found nothing relevant
             // and the AI service declined without calling a model. Recording it
             // is what makes gaps in the corpus visible later.
@@ -156,15 +162,15 @@ public class ChatService {
                         context.conversationId(),
                         question,
                         response.answer(),
-                        toCitations(response),
-                        response.grounded(),
+                        citations,
+                        grounded,
                         response.model(),
                         response.totalTokens(),
                         latencyMs);
 
         // After persistence, and best-effort: a counter must never be the
         // reason a customer loses an answer they already paid a model call for.
-        usageService.recordExchange(context.botId(), response.grounded(), response.totalTokens());
+        usageService.recordExchange(context.botId(), grounded, response.totalTokens());
 
         log.info(
                 "answered conversation {} in {}ms (grounded={}, citations={})",

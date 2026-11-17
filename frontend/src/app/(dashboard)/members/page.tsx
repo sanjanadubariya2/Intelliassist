@@ -11,6 +11,7 @@ import {
   Empty,
   ErrorNote,
   Loading,
+  PageHeader,
   formatDate,
 } from "@/components/ui";
 
@@ -23,12 +24,10 @@ export default function MembersPage() {
 
   return (
     <>
-      <div className="mb-5">
-        <h1 className="text-xl font-semibold tracking-tight">Members</h1>
-        <p className="mt-0.5 text-[13px] text-muted">
-          People with access to {user?.organization.name}.
-        </p>
-      </div>
+      <PageHeader
+        title="Members"
+        description={`People with access to ${user?.organization.name ?? "this workspace"}. Anyone here can be assigned handoff conversations.`}
+      />
 
       <Card>
         <CardHeader

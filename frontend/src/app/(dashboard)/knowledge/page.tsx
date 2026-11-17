@@ -2,8 +2,9 @@
 
 import { useState } from "react";
 import Link from "next/link";
-import { BookOpen, FileText } from "lucide-react";
-import { api, type Bot, type Document, type DocumentStatus } from "@/lib/api";
+import { BookOpen, FileText, HeartPulse } from "lucide-react";
+import { api, isIndexing, type Bot, type Document } from "@/lib/api";
+import { DocumentStatusBadge } from "@/components/document-status";
 import { useAsync, usePolling } from "@/lib/hooks";
 import {
   Badge,
@@ -12,19 +13,12 @@ import {
   Empty,
   ErrorNote,
   Loading,
+  PageHeader,
   Select,
-  type Tone,
   formatBytes,
   formatRelative,
   cx,
 } from "@/components/ui";
-
-const STATUS: Record<DocumentStatus, { label: string; tone: Tone }> = {
-  PENDING: { label: "Queued", tone: "neutral" },
-  PROCESSING: { label: "Indexing", tone: "warn" },
-  INDEXED: { label: "Ready", tone: "ok" },
-  FAILED: { label: "Failed", tone: "bad" },
-};
 
 /**
  * The tabs from the design.
@@ -72,9 +66,7 @@ export default function KnowledgePage() {
   const [botFilter, setBotFilter] = useState<string | "all">("all");
   const { data, loading, error, reload } = useAsync(loadLibrary);
 
-  const settling = (data?.documents ?? []).some(
-    (document) => document.status === "PENDING" || document.status === "PROCESSING",
-  );
+  const settling = (data?.documents ?? []).some((document) => isIndexing(document.status));
   usePolling(reload, 3000, settling);
 
   const documents =
@@ -84,12 +76,19 @@ export default function KnowledgePage() {
 
   return (
     <>
-      <div className="mb-5">
-        <h1 className="text-xl font-semibold tracking-tight">Knowledge base</h1>
-        <p className="mt-0.5 text-[13px] text-muted">
-          Everything your bots are allowed to answer from.
-        </p>
-      </div>
+      <PageHeader
+        title="Knowledge Base"
+        description="Everything your bots are allowed to answer from."
+        action={
+          <Link
+            href="/health"
+            className="inline-flex items-center gap-2 rounded-xl border border-line bg-surface px-4 py-2 text-sm font-medium hover:border-clay/40"
+          >
+            <HeartPulse className="h-4 w-4 text-clay" />
+            Check health
+          </Link>
+        }
+      />
 
       <div className="mb-5 flex gap-1 overflow-x-auto border-b border-line">
         {TABS.map((entry) => (
@@ -99,7 +98,7 @@ export default function KnowledgePage() {
             className={cx(
               "-mb-px flex items-center gap-1.5 whitespace-nowrap border-b-2 px-3.5 py-2.5 text-sm transition-colors",
               tab === entry.id
-                ? "border-accent font-medium text-accent"
+                ? "border-clay font-medium text-ink"
                 : "border-transparent text-muted hover:text-ink",
             )}
           >
@@ -176,15 +175,13 @@ export default function KnowledgePage() {
                     <td className="px-5 py-3.5">
                       <Link
                         href={`/bots/${document.botId}`}
-                        className="text-muted hover:text-accent"
+                        className="text-muted hover:text-clay"
                       >
                         {document.botName}
                       </Link>
                     </td>
                     <td className="px-5 py-3.5">
-                      <Badge tone={STATUS[document.status].tone}>
-                        {STATUS[document.status].label}
-                      </Badge>
+                      <DocumentStatusBadge status={document.status} />
                       {document.status === "FAILED" && document.errorMessage && (
                         <p className="mt-1 max-w-xs text-[12px] text-bad">
                           {document.errorMessage}

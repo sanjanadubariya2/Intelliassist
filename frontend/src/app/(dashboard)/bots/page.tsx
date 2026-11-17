@@ -14,9 +14,12 @@ import {
   Field,
   Input,
   Loading,
+  ConfirmModal,
   Modal,
+  PageHeader,
   Textarea,
   cx,
+  notify,
   formatDate,
   formatNumber,
 } from "@/components/ui";
@@ -56,18 +59,16 @@ export default function BotsPage() {
 
   return (
     <>
-      <div className="mb-5 flex flex-wrap items-end justify-between gap-4">
-        <div>
-          <h1 className="text-xl font-semibold tracking-tight">Bots</h1>
-          <p className="mt-0.5 text-[13px] text-muted">
-            Create and manage AI bots for your business.
-          </p>
-        </div>
-        <Button onClick={() => setCreating(true)}>
-          <Plus className="h-4 w-4" />
-          Create Bot
-        </Button>
-      </div>
+      <PageHeader
+        title="Bots"
+        description="Create and manage AI assistants for your business. Each has its own documents, widget and conversations."
+        action={
+          <Button onClick={() => setCreating(true)}>
+            <Plus className="h-4 w-4" />
+            Create bot
+          </Button>
+        }
+      />
 
       {loading ? (
         <Loading />
@@ -186,6 +187,7 @@ export default function BotsPage() {
 /** The row's overflow menu. Closes on any outside click. */
 function RowMenu({ botId, onChanged }: { botId: string; onChanged: () => void }) {
   const [open, setOpen] = useState(false);
+  const [confirming, setConfirming] = useState(false);
   const router = useRouter();
 
   return (
@@ -205,9 +207,10 @@ function RowMenu({ botId, onChanged }: { botId: string; onChanged: () => void })
           <span className="absolute right-0 z-20 mt-1 block w-44 overflow-hidden rounded-lg border border-line bg-surface py-1 text-left shadow-lg">
             {[
               { label: "Open", href: `/bots/${botId}` },
-              { label: "Knowledge", href: `/bots/${botId}` },
-              { label: "Customize", href: "/customization" },
-              { label: "Embed", href: "/embed" },
+              { label: "Test in playground", href: `/playground?bot=${botId}` },
+              { label: "KB Health", href: `/health?bot=${botId}` },
+              { label: "Widget Studio", href: `/studio?bot=${botId}` },
+              { label: "Embed code", href: `/studio?bot=${botId}&tab=install` },
             ].map((item) => (
               <button
                 key={item.label}
@@ -221,11 +224,9 @@ function RowMenu({ botId, onChanged }: { botId: string; onChanged: () => void })
               </button>
             ))}
             <button
-              onClick={async () => {
+              onClick={() => {
                 setOpen(false);
-                if (!confirm("Delete this bot and everything it has learned?")) return;
-                await api.bots.remove(botId);
-                onChanged();
+                setConfirming(true);
               }}
               className="block w-full border-t border-line px-3 py-2 text-left text-[13px] text-bad hover:bg-bad-soft"
             >
@@ -234,6 +235,23 @@ function RowMenu({ botId, onChanged }: { botId: string; onChanged: () => void })
           </span>
         </>
       )}
+
+      <ConfirmModal
+        open={confirming}
+        title="Delete this bot?"
+        confirmLabel="Delete permanently"
+        body="Its conversations, embed keys and every indexed document go with it. This cannot be undone."
+        onClose={() => setConfirming(false)}
+        onConfirm={async () => {
+          try {
+            await api.bots.remove(botId);
+            notify.success("Bot deleted");
+            onChanged();
+          } catch (caught) {
+            notify.failure(caught, "Could not delete the bot.");
+          }
+        }}
+      />
     </span>
   );
 }

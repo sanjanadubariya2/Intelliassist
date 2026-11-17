@@ -2,7 +2,7 @@
 
 import { Building2, KeyRound, Mail, ShieldCheck } from "lucide-react";
 import { useAuth } from "@/lib/auth";
-import { Badge, Card, CardHeader, Loading } from "@/components/ui";
+import { Badge, Card, CardHeader, Loading, PageHeader } from "@/components/ui";
 
 /**
  * The organization and account, read-only.
@@ -18,10 +18,7 @@ export default function SettingsPage() {
 
   return (
     <>
-      <div className="mb-5">
-        <h1 className="text-xl font-semibold tracking-tight">Settings</h1>
-        <p className="mt-0.5 text-[13px] text-muted">Your organization and account.</p>
-      </div>
+      <PageHeader title="Settings" description="Your organization and account." />
 
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
         <Card>

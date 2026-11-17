@@ -16,6 +16,7 @@ import {
   Loading,
   Modal,
   formatDate,
+  notify,
 } from "@/components/ui";
 
 /**
@@ -80,8 +81,13 @@ function DomainList({ botId }: { botId: string }) {
                 </div>
                 <button
                   onClick={async () => {
-                    await api.credentials.removeDomain(domain.id);
-                    reload();
+                    try {
+                      await api.credentials.removeDomain(domain.id);
+                      notify.success(`${domain.domain} removed`);
+                      reload();
+                    } catch (caught) {
+                      notify.failure(caught, "Could not remove the domain.");
+                    }
                   }}
                   aria-label={`Remove ${domain.domain}`}
                   className="rounded-md p-1.5 text-faint hover:bg-bad-soft hover:text-bad"

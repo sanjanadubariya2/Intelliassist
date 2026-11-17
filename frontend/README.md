@@ -15,6 +15,7 @@ npm run dev
 | `npm run build` | Production build |
 | `npm run lint` | ESLint |
 | `npm run typecheck` | `tsc --noEmit` |
+| `npm test` | Unit tests (Node's built-in runner, no extra dependencies) |
 | `npm run clean` | Delete `.next` |
 
 **Stale-build errors are handled automatically.** `next build` and `next dev`
@@ -37,22 +38,46 @@ ever need to.
 ```
 src/
   app/
-    (auth)/          sign in, sign up — redirects away if already signed in
+    welcome/         the product page signed-out visitors land on
+    (auth)/          sign in, sign up: redirects away if already signed in
     (dashboard)/     everything behind a session
       page.tsx                       overview
+      ask/                           Ask Intelli, the setup guide
       bots/                          list, then per-bot tabs
         [botId]/knowledge.tsx        upload and index documents
         [botId]/playground.tsx       streamed test chat
         [botId]/embed.tsx            API keys, allowed domains, snippet
         [botId]/settings.tsx         name, status, language, delete
+      playground/                    Chat Playground for any bot
       knowledge/                     documents across every bot
+      health/                        Knowledge Base Health Monitor
+      studio/                        Widget Studio: style, preview, install
       conversations/                 feed, then transcript
+      inbox/                         Human Handoff Inbox
+      insights/                      Conversation Intelligence
   lib/
-    api.ts           typed client — mirrors the backend DTOs
+    api.ts           typed client: mirrors the backend DTOs
     auth.tsx         session context
     hooks.ts         useAsync / usePolling
-  components/ui.tsx  the shared primitives
+    intelli.ts       Ask Intelli's request parser (pure, unit-tested)
+    dates.ts         UTC date helpers, matching how the backend buckets days
+    theme.ts         chart colours (Recharts cannot read CSS variables)
+  components/
+    ui.tsx           the shared primitives, toasts and dialogs
+    knowledge-health.tsx, conversation-insights.tsx, widget-studio.tsx
 ```
+
+`/customization` and `/embed` redirect to Widget Studio, so old links still land.
+
+## The five newer tools
+
+| Tool | Backed by |
+| --- | --- |
+| **KB Health Monitor** | `GET /bots/{id}/knowledge/health`. Failed, stuck, empty, outdated, duplicate and conflicting-version documents, scored out of 100, plus suggested FAQs from questions the bot could not answer. Works from metadata; document text is never compared, and the screen says so. |
+| **Widget Studio** | The existing appearance and credential endpoints, on one screen with a live preview. |
+| **Human Handoff Inbox** | `GET /handoff/conversations?view=`, `GET /handoff/summary`, `PATCH /conversations/{id}/assignee`. Org-wide queue, assignment to members, median time to resolution. |
+| **Conversation Intelligence** | `GET /bots/{id}/insights`. Common and unanswered questions (grouped by normalised text), answer rate, resolution trend. "Satisfaction" is resolved ÷ (resolved + escalated): there is no visitor rating yet, and the label says so. |
+| **Ask Intelli** | Deterministic: patterns rather than a language model, so it never invents a feature or misreads "pause" as "delete". Every change is a proposal that waits for approval, and is then made through the ordinary API. |
 
 ## Notes
 
@@ -82,11 +107,7 @@ Called out rather than faked:
 
 | Design element | Status |
 | --- | --- |
-| "Resolved %" tile | Replaced with **grounded answers**. Nothing marks a conversation resolved; grounding is what the backend tracks, and for a RAG assistant it is the more useful number. |
-| "Avg response time" tile | Replaced with **tokens used**. `latencyMs` exists per message but there is no aggregate endpoint. |
-| Bot customization (colour, position, welcome/fallback text, launcher icon) | Not in the dashboard. `Bot` has no such columns. The widget takes them as embed-snippet attributes instead, which needs no schema change. |
 | Knowledge tabs: FAQs, Websites | Shown disabled. The AI service ingests PDF/DOCX/TXT/MD files only, and it is frozen. |
-| Conversation "Resolved / Escalated", internal notes | Not built. `ConversationStatus` is `ACTIVE` or `CLOSED`, and there is no notes table. |
 
 The system prompt field is the one place a saved value does nothing today: it
 persists on the bot, but the AI service's query contract has no parameter to

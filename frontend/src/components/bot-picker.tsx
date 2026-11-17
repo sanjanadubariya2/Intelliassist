@@ -1,66 +1,98 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { Suspense, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { Bot as BotIcon } from "lucide-react";
 import { api, type Bot } from "@/lib/api";
 import { useAsync } from "@/lib/hooks";
-import { Card, Empty, ErrorNote, Loading, Select } from "@/components/ui";
+import { Card, Empty, ErrorNote, Loading, PageHeader, Select, buttonLink } from "@/components/ui";
 
 /**
  * Wraps a screen that only makes sense for one bot.
  *
- * Customization, API keys and domains are all per-bot, and every one of them
- * otherwise repeats the same four states: loading, failed, no bots at all, and
- * a picker. Having them diverge is how one of them ends up with no empty state.
+ * Customization, health, insights and the playground are all per bot, and every
+ * one of them otherwise repeats the same four states: loading, failed, no bots
+ * at all, and a picker. Having them diverge is how one of them ends up with no
+ * empty state.
+ *
+ * The choice is kept in the URL (`?bot=`), so a link to "insights for the
+ * Support bot" works, and moving between these screens keeps the same bot.
  */
-export function WithBot({
+export function WithBot(props: {
+  title: string;
+  description: string;
+  eyebrow?: React.ReactNode;
+  children: (bot: Bot, reload: () => void) => React.ReactNode;
+}) {
+  // useSearchParams needs a Suspense boundary during prerender.
+  return (
+    <Suspense fallback={<Loading />}>
+      <Picker {...props} />
+    </Suspense>
+  );
+}
+
+function Picker({
   title,
   description,
+  eyebrow,
   children,
 }: {
   title: string;
   description: string;
+  eyebrow?: React.ReactNode;
   children: (bot: Bot, reload: () => void) => React.ReactNode;
 }) {
-  const { data, loading, error, reload } = useAsync(() => api.bots.list());
-  const [botId, setBotId] = useState<string | null>(null);
+  const router = useRouter();
+  const pathname = usePathname();
+  const params = useSearchParams();
+  const { data, loading, error, reload } = useAsync(() => api.bots.list(0, 100));
 
   // Memoised because the effect below depends on it: `data?.items ?? []`
   // is a fresh array every render, which would re-run the effect forever.
   const bots = useMemo(() => data?.items ?? [], [data]);
+  const requested = params.get("bot");
+  const [botId, setBotId] = useState<string | null>(requested);
 
-  // Select the first bot once they load, and recover if the chosen one is gone.
+  // Select the requested bot, else the first, and recover if it is gone.
   useEffect(() => {
     if (!bots.length) return;
     if (!botId || !bots.some((bot) => bot.id === botId)) setBotId(bots[0].id);
   }, [bots, botId]);
 
+  function choose(id: string) {
+    setBotId(id);
+    const next = new URLSearchParams(params.toString());
+    next.set("bot", id);
+    router.replace(`${pathname}?${next}`, { scroll: false });
+  }
+
   const selected = bots.find((bot) => bot.id === botId) ?? null;
 
   return (
     <>
-      <div className="mb-5 flex flex-wrap items-end justify-between gap-4">
-        <div>
-          <h1 className="text-xl font-semibold tracking-tight">{title}</h1>
-          <p className="mt-0.5 text-[13px] text-muted">{description}</p>
-        </div>
-
-        {bots.length > 1 && (
-          <Select
-            value={botId ?? ""}
-            onChange={(event) => setBotId(event.target.value)}
-            className="w-auto"
-            aria-label="Bot"
-          >
-            {bots.map((bot) => (
-              <option key={bot.id} value={bot.id}>
-                {bot.name}
-              </option>
-            ))}
-          </Select>
-        )}
-      </div>
+      <PageHeader
+        title={title}
+        description={description}
+        eyebrow={eyebrow}
+        action={
+          bots.length > 1 ? (
+            <Select
+              value={botId ?? ""}
+              onChange={(event) => choose(event.target.value)}
+              className="w-auto min-w-48"
+              aria-label="Bot"
+            >
+              {bots.map((bot) => (
+                <option key={bot.id} value={bot.id}>
+                  {bot.name}
+                </option>
+              ))}
+            </Select>
+          ) : undefined
+        }
+      />
 
       {loading ? (
         <Loading />
@@ -69,14 +101,11 @@ export function WithBot({
       ) : !selected ? (
         <Card>
           <Empty
-            icon={<BotIcon className="h-7 w-7" />}
+            icon={<BotIcon className="h-6 w-6" />}
             title="No bots yet"
-            description="Create a bot first — this screen configures one."
+            description="Create a bot first. This screen works on one."
             action={
-              <Link
-                href="/bots"
-                className="inline-flex rounded-lg bg-accent px-4 py-2 text-sm font-medium text-white hover:bg-accent-strong"
-              >
+              <Link href="/bots" className={buttonLink}>
                 Create a bot
               </Link>
             }
