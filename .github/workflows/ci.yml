@@ -81,7 +81,7 @@ jobs:
         run: uv run pytest -m integration
 
   backend:
-    name: backend · 275 tests
+    name: backend · 302 tests
     runs-on: ubuntu-latest
     defaults:
       run:

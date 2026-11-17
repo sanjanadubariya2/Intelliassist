@@ -4,8 +4,9 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useAuth } from "@/lib/auth";
-import { ApiError } from "@/lib/api";
+import { ApiError, SSO_ERRORS } from "@/lib/api";
 import { Button, Field, Input } from "@/components/ui";
+import { OrDivider, SsoButtons } from "@/components/sso-buttons";
 
 export default function LoginPage() {
   const { signIn } = useAuth();
@@ -16,12 +17,17 @@ export default function LoginPage() {
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [expired, setExpired] = useState(false);
+  const [ssoError, setSsoError] = useState<string | null>(null);
 
-  // Set by the API client when a token runs out mid-session. Read from
+  // `expired` is set by the API client when a token runs out mid-session, and
+  // `sso_error` by the backend when a provider sign-in fails. Read from
   // location in an effect rather than useSearchParams, which would need a
   // Suspense boundary around the whole form.
   useEffect(() => {
-    setExpired(new URLSearchParams(window.location.search).has("expired"));
+    const params = new URLSearchParams(window.location.search);
+    setExpired(params.has("expired"));
+    const code = params.get("sso_error");
+    if (code) setSsoError(SSO_ERRORS[code] ?? "Sign-in with that provider didn't work. Please try again.");
   }, []);
 
   async function onSubmit(event: React.FormEvent) {
@@ -52,14 +58,24 @@ export default function LoginPage() {
 
   return (
     <>
-      <h1 className="font-display text-[26px] font-semibold tracking-tight">Sign in</h1>
-      <p className="mt-1 mb-5 text-[13px] text-muted">Welcome back.</p>
+      <h1 className="font-display text-[38px] font-semibold leading-tight tracking-tight">Welcome back</h1>
+      <p className="mt-2 mb-6 text-[16px] text-muted">Sign in to your workspace.</p>
 
       {expired && (
         <p className="mb-4 rounded-xl bg-warn-soft px-3 py-2 text-[13px] text-warn" role="status">
           Your session expired. Sign in again to pick up where you left off.
         </p>
       )}
+      {ssoError && (
+        <p className="mb-4 rounded-xl bg-bad-soft px-3 py-2 text-[13px] text-bad" role="alert">
+          {ssoError}
+        </p>
+      )}
+
+      <SsoButtons verb="Continue" />
+      <div className="my-6">
+        <OrDivider>or sign in with email</OrDivider>
+      </div>
 
       <form onSubmit={onSubmit} className="space-y-4">
         <Field label="Email">
@@ -95,10 +111,10 @@ export default function LoginPage() {
         </Button>
       </form>
 
-      <p className="mt-5 text-center text-[13px] text-muted">
-        No account?{" "}
-        <Link href="/register" className="font-medium text-clay hover:underline">
-          Create one
+      <p className="mt-6 text-center text-[14px] text-muted">
+        New to IntelliAssist?{" "}
+        <Link href="/register" className="font-semibold text-accent hover:underline">
+          Create an account
         </Link>
       </p>
     </>

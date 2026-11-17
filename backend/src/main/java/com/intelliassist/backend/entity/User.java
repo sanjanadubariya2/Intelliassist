@@ -41,8 +41,14 @@ public class User {
     @Column(nullable = false, unique = true, length = 320)
     private String email;
 
-    /** BCrypt hash. Never logged, never serialised, never returned. */
-    @Column(name = "password_hash", nullable = false, length = 100)
+    /**
+     * BCrypt hash. Never logged, never serialised, never returned.
+     *
+     * <p>{@code null} for an account created through single sign-on, which has
+     * no password until its owner sets one. Password login treats that as a
+     * failed match.
+     */
+    @Column(name = "password_hash", length = 100)
     private String passwordHash;
 
     @CreationTimestamp

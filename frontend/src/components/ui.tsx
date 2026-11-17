@@ -17,21 +17,17 @@ export function cx(...values: Array<string | false | null | undefined>) {
 
 // ------------------------------------------------------------------- brand --
 
-/** The leaf mark. Drawn here rather than imported so it can take any colour. */
+/**
+ * The mark: Inti's speech bubble with two eyes cut out, so it reads on any
+ * background in any colour. The full character lives in components/inti.tsx.
+ */
 export function LogoMark({ className }: { className?: string }) {
   return (
     <svg viewBox="0 0 32 32" aria-hidden className={cx("h-7 w-7", className)}>
       <path
-        d="M27 4C15 4 6 11 6 21c0 2.2.5 4.2 1.3 6 1.4-6.6 6.1-12.6 13.2-16.4-5.4 4.3-9.1 10-10.3 16.8 1.6.7 3.4 1 5.2 1C25 28.4 28 17 27 4Z"
+        fillRule="evenodd"
         fill="currentColor"
-      />
-      <path
-        d="M10 27.5c2.2-6.6 6.5-12 12.5-15.6"
-        stroke="white"
-        strokeOpacity=".55"
-        strokeWidth="1.3"
-        fill="none"
-        strokeLinecap="round"
+        d="M8 3h16a7 7 0 0 1 7 7v8a7 7 0 0 1-7 7h-6l-5 5v-5H8a7 7 0 0 1-7-7v-8a7 7 0 0 1 7-7z M8.8 14a2.2 2.2 0 1 0 4.4 0a2.2 2.2 0 1 0 -4.4 0z M18.8 14a2.2 2.2 0 1 0 4.4 0a2.2 2.2 0 1 0 -4.4 0z"
       />
     </svg>
   );
@@ -40,7 +36,7 @@ export function LogoMark({ className }: { className?: string }) {
 export function Logo({ className }: { className?: string }) {
   return (
     <span className={cx("flex items-center gap-2", className)}>
-      <LogoMark className="text-clay" />
+      <LogoMark className="text-accent" />
       <span className="font-display text-[19px] font-semibold tracking-tight text-ink">
         IntelliAssist
       </span>
@@ -70,10 +66,10 @@ export function PageHeader({
             {eyebrow}
           </p>
         )}
-        <h1 className="font-display text-[28px] font-semibold leading-tight tracking-tight text-ink">
+        <h1 className="font-display text-[30px] font-semibold leading-tight tracking-tight text-ink sm:text-[34px]">
           {title}
         </h1>
-        {description && <p className="mt-1 max-w-2xl text-[13.5px] text-muted">{description}</p>}
+        {description && <p className="mt-1.5 max-w-2xl text-[15px] text-muted">{description}</p>}
       </div>
       {action}
     </div>
@@ -148,9 +144,11 @@ export function Button({
       // A loading button must not fire twice; disabling it is the guard.
       disabled={disabled || loading}
       className={cx(
-        "inline-flex items-center justify-center gap-2 rounded-xl font-medium transition-colors",
+        "inline-flex items-center justify-center gap-2 rounded-xl font-semibold transition-colors",
         "disabled:cursor-not-allowed disabled:opacity-50",
-        size === "sm" ? "px-3 py-1.5 text-[13px]" : "px-4 py-2 text-sm",
+        // 44px is the smallest comfortable touch target; `sm` is for dense
+        // rows (tables, toolbars) where a full-height button would crowd.
+        size === "sm" ? "min-h-9 px-3 text-[13px]" : "min-h-11 px-4 text-sm",
         VARIANTS[variant],
         className,
       )}
@@ -163,12 +161,12 @@ export function Button({
 
 /** Classes for a Link that should look like the primary button. */
 export const buttonLink =
-  "inline-flex items-center justify-center gap-2 rounded-xl bg-accent px-4 py-2 text-sm font-medium text-white shadow-sm transition-colors hover:bg-accent-strong";
+  "inline-flex min-h-11 items-center justify-center gap-2 rounded-xl bg-accent px-4 text-sm font-semibold text-white shadow-sm transition-colors hover:bg-accent-strong";
 
 // ------------------------------------------------------------------ input --
 
 const FIELD =
-  "w-full rounded-xl border border-line bg-surface px-3 py-2 text-sm text-ink " +
+  "w-full min-h-11 rounded-xl border border-[#e2d4c5] bg-surface px-3.5 py-2 text-sm text-ink " +
   "placeholder:text-faint focus:border-clay/60 focus:outline-none focus:ring-2 focus:ring-clay/15";
 
 export function Field({
@@ -269,7 +267,7 @@ export function Badge({ tone = "neutral", children }: { tone?: Tone; children: R
   return (
     <span
       className={cx(
-        "inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[11.5px] font-medium",
+        "inline-flex items-center gap-1 whitespace-nowrap rounded-full px-2.5 py-0.5 text-[12px] font-semibold",
         TONES[tone],
       )}
     >
@@ -303,10 +301,11 @@ export function StatCard({
           {icon}
         </span>
       </div>
-      <p className="mt-2 font-display text-[28px] font-semibold leading-tight tracking-tight">
+      <p className="mt-2 font-display text-[32px] font-semibold leading-tight tracking-tight">
         {value}
       </p>
-      {hint && <p className="mt-0.5 text-[12px] text-faint">{hint}</p>}
+      {/* `muted`, not `faint`: faint fails contrast on white at this size. */}
+      {hint && <p className="mt-0.5 text-[13px] text-muted">{hint}</p>}
     </Card>
   );
 }

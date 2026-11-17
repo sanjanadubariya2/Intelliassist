@@ -120,6 +120,12 @@ public class SecurityConfig {
                                         .requestMatchers(
                                                 "/api/v1/auth/register", "/api/v1/auth/login")
                                         .permitAll()
+                                        // Single sign-on. The browser arrives
+                                        // here before it has any token; the
+                                        // signed state and nonce cookie are
+                                        // what protect the round-trip.
+                                        .requestMatchers(HttpMethod.GET, "/api/v1/auth/oauth/**")
+                                        .permitAll()
                                         // Probes carry no credentials.
                                         .requestMatchers("/api/v1/health", "/actuator/health/**")
                                         .permitAll()

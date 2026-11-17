@@ -80,6 +80,41 @@ with no useful error — it took dumping raw bytes to find.
 **No transaction spans an HTTP call** to the AI service. Reads are retried,
 writes never, because ingestion is not idempotent.
 
+## Single sign-on (Google, GitHub, LinkedIn)
+
+The authorization-code flow is implemented directly in `OAuthController`
+rather than with Spring's `oauth2Login`, because that keeps a server session
+and this service is stateless.
+
+1. The dashboard links to `GET /api/v1/auth/oauth/{provider}/start`, which
+   redirects to the provider with a signed, 10-minute `state` and sets a
+   matching HttpOnly nonce cookie (`OAuthStateService`).
+2. The provider returns to `/{provider}/callback`. The state and cookie must
+   agree, which stops forged callbacks and login CSRF. The code is exchanged
+   and the profile read (`OAuthClient`).
+3. `AuthService.signInWithProvider` signs in the linked user, or links the
+   provider to an existing **provider-only** account with the same verified
+   email, or creates a user (no password) with their own workspace.
+4. The browser lands on the dashboard's `/auth/callback#token=…`. The token is
+   in the fragment so it never reaches a server log.
+
+Accounts are matched on the provider's stable subject id, never email alone.
+A provider sign-in never joins an account that has a password: password
+sign-up does not verify addresses, so linking would let whoever registered an
+address first take over its owner's sign-ins. Those users get
+`sso_error=account_exists` and sign in with their password.
+
+**Setup.** Create an OAuth app with each provider and register
+`<OAUTH_PUBLIC_URL>/api/v1/auth/oauth/<google|github|linkedin>/callback` as its
+redirect URI. Then set `<PROVIDER>_CLIENT_ID` and `<PROVIDER>_CLIENT_SECRET`
+(see `.env.example`). Unconfigured providers show as greyed-out buttons.
+
+| Provider | Console | Scopes requested |
+| --- | --- | --- |
+| Google | Google Cloud Console → APIs & Services → Credentials | `openid email profile` |
+| GitHub | Settings → Developer settings → OAuth Apps | `read:user user:email` |
+| LinkedIn | LinkedIn Developers → your app → Auth (add "Sign In with LinkedIn using OpenID Connect") | `openid profile email` |
+
 ## The widget ships inside the jar
 
 `Dockerfile` builds `widget/` in a Node stage and copies the bundle into the

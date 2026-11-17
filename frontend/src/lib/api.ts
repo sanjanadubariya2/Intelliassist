@@ -46,6 +46,37 @@ export interface AuthResponse {
   role: MemberRole;
 }
 
+/** Mirrors OAuthController.ProviderSummary. */
+export type SsoProviderId = "google" | "github" | "linkedin";
+
+export interface SsoProvider {
+  id: SsoProviderId;
+  name: string;
+  /** False when the deployment has no client id and secret for it. */
+  enabled: boolean;
+}
+
+/**
+ * Where a provider button sends the browser. A full navigation, not a fetch:
+ * the backend answers with a redirect to the provider's own sign-in page.
+ */
+export function ssoStartUrl(provider: SsoProviderId) {
+  return `${BASE_URL}/api/v1/auth/oauth/${provider}/start`;
+}
+
+/** What each `sso_error` code from the backend means, in words. */
+export const SSO_ERRORS: Record<string, string> = {
+  access_denied: "Sign-in was cancelled.",
+  provider_not_configured: "That sign-in option isn't set up on this server yet.",
+  unknown_provider: "That sign-in option doesn't exist.",
+  invalid_state: "The sign-in link expired or was opened in another browser. Please try again.",
+  no_verified_email: "The provider didn't share a verified email address, so we can't sign you in with it.",
+  account_exists:
+    "An account with this email already exists. Sign in with your email and password instead.",
+  no_organization: "Your account isn't part of any workspace.",
+  provider_error: "We couldn't reach the sign-in provider. Please try again.",
+};
+
 export interface UserSummary {
   id: string;
   name: string;
@@ -500,6 +531,9 @@ export const api = {
       request<AuthResponse>("/auth/login", { body }),
 
     me: () => request<CurrentUser>("/auth/me"),
+
+    /** Which single sign-on providers this deployment has configured. */
+    providers: () => request<{ providers: SsoProvider[] }>("/auth/oauth/providers"),
   },
 
   bots: {

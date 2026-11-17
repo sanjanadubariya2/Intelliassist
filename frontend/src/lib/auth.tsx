@@ -15,6 +15,8 @@ interface AuthState {
     password: string;
     organizationName: string;
   }) => Promise<void>;
+  /** Completes a single sign-on: stores the token the backend issued. */
+  signInWithToken: (token: string) => Promise<void>;
   signOut: () => void;
 }
 
@@ -69,6 +71,17 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     [],
   );
 
+  const signInWithToken = useCallback(async (token: string) => {
+    tokenStore.set(token);
+    try {
+      setUser(await api.auth.me());
+    } catch (error) {
+      // A token that does not work is not a session.
+      tokenStore.clear();
+      throw error;
+    }
+  }, []);
+
   const signOut = useCallback(() => {
     tokenStore.clear();
     setUser(null);
@@ -76,7 +89,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, [router]);
 
   return (
-    <AuthContext.Provider value={{ user, loading, signIn, signUp, signOut }}>
+    <AuthContext.Provider value={{ user, loading, signIn, signUp, signInWithToken, signOut }}>
       {children}
     </AuthContext.Provider>
   );
