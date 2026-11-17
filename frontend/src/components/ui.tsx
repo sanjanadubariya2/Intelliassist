@@ -62,7 +62,7 @@ export function PageHeader({
     <div className="mb-6 flex flex-wrap items-end justify-between gap-4">
       <div className="min-w-0">
         {eyebrow && (
-          <p className="mb-1.5 inline-flex items-center gap-1.5 rounded-full bg-clay-soft px-2.5 py-0.5 text-[11.5px] font-medium text-clay">
+          <p className="mb-2 flex items-center gap-1.5 text-[12px] font-semibold uppercase tracking-[0.06em] text-muted">
             {eyebrow}
           </p>
         )}
@@ -237,10 +237,10 @@ export function Tabs<T extends string>({
           aria-selected={value === tab.id}
           onClick={() => onChange(tab.id)}
           className={cx(
-            "-mb-px flex items-center gap-1.5 whitespace-nowrap border-b-2 px-3.5 py-2.5 text-sm transition-colors",
+            "-mb-px flex min-h-11 items-center gap-1.5 whitespace-nowrap border-b-2 px-4 text-[14px] transition-colors",
             value === tab.id
-              ? "border-clay font-medium text-ink"
-              : "border-transparent text-muted hover:text-ink",
+              ? "border-clay font-semibold text-clay-strong"
+              : "border-transparent font-medium text-[#5f5249] hover:text-ink",
           )}
         >
           {tab.label}

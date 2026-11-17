@@ -33,6 +33,7 @@ import {
   Loading,
   Select,
   StatCard,
+  cx,
   formatNumber,
   formatPercent,
   formatRelative,
@@ -221,16 +222,23 @@ function QuestionList({
           {items.map((item, index) => {
             const value = show === "count" ? item.count : item.unansweredCount;
             return (
-              <li key={`${item.question}-${index}`} className="px-5 py-3">
+              <li key={`${item.question}-${index}`} className="px-6 py-3.5">
                 <div className="flex items-start justify-between gap-3">
-                  <p className="min-w-0 text-[13.5px]">
-                    <span className="mr-2 text-faint">{index + 1}.</span>
+                  <p className="min-w-0 text-[14px] font-medium">
+                    <span className="mr-2 text-muted">{index + 1}.</span>
                     {item.question}
                   </p>
-                  <span className="shrink-0 font-display text-[15px] font-semibold">{value}×</span>
+                  <span
+                    className={cx(
+                      "shrink-0 font-display text-[18px] font-semibold",
+                      show === "unanswered" && "text-clay-strong",
+                    )}
+                  >
+                    {value}×
+                  </span>
                 </div>
-                <div className="mt-1.5 flex items-center gap-2">
-                  <div className="h-1.5 flex-1 overflow-hidden rounded-full bg-cream ring-1 ring-line">
+                <div className="mt-2 flex items-center gap-2">
+                  <div className="h-2.5 flex-1 overflow-hidden rounded-full bg-[#f3ece4]">
                     <div
                       className="h-full rounded-full"
                       style={{ width: `${(value / max) * 100}%`, background: show === "count" ? chart.primary : chart.clay }}
@@ -239,7 +247,7 @@ function QuestionList({
                   {show === "count" && item.unansweredCount > 0 && (
                     <Badge tone="warn">{item.unansweredCount} unanswered</Badge>
                   )}
-                  <span className="text-[11px] text-faint">{formatRelative(item.lastAskedAt)}</span>
+                  <span className="text-[12px] text-muted">{formatRelative(item.lastAskedAt)}</span>
                 </div>
               </li>
             );

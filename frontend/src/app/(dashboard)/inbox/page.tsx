@@ -120,16 +120,11 @@ function Inbox() {
       <PageHeader
         title="Human Handoff Inbox"
         description="Conversations your assistant handed to a person. Assign them, reply in your own channels, and track them to resolution."
-        eyebrow={
-          <>
-            <InboxIcon className="h-3.5 w-3.5" /> Handoff
-          </>
-        }
       />
 
-      <div className="mb-4 grid grid-cols-2 gap-3 lg:grid-cols-4">
-        <Stat label="Waiting" value={summary.data?.open} icon={<InboxIcon className="h-4 w-4" />} />
-        <Stat label="Unassigned" value={summary.data?.unassigned} icon={<Users className="h-4 w-4" />} tone="clay" />
+      <div className="mb-5 grid grid-cols-2 gap-3 lg:grid-cols-4">
+        <Stat label="Waiting" value={summary.data?.open} icon={<InboxIcon className="h-4 w-4" />} tone="clay" />
+        <Stat label="Unassigned" value={summary.data?.unassigned} icon={<Users className="h-4 w-4" />} />
         <Stat label="Resolved · 30 days" value={summary.data?.resolvedLast30Days} icon={<CheckCircle2 className="h-4 w-4" />} />
         <Stat
           label="Median time to resolve"
@@ -146,14 +141,15 @@ function Inbox() {
 
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-[360px_minmax(0,1fr)]">
         <Card className={cx("flex flex-col overflow-hidden lg:h-[calc(100dvh-300px)] lg:min-h-[520px]", selectedId && "hidden lg:flex")}>
-          <div className="grid grid-cols-2 gap-1 border-b border-line p-2">
+          <div className="m-3 grid grid-cols-2 gap-1 rounded-xl bg-[#f3ece4] p-1">
             {VIEWS.map(({ id, label, icon: Icon }) => (
               <button
                 key={id}
                 onClick={() => go({ view: id, c: null })}
+                aria-pressed={view === id}
                 className={cx(
-                  "flex items-center gap-1.5 whitespace-nowrap rounded-lg px-2.5 py-1.5 text-[12.5px] transition-colors",
-                  view === id ? "bg-clay-soft font-medium text-ink" : "text-muted hover:bg-cream hover:text-ink",
+                  "flex min-h-9 items-center gap-1.5 whitespace-nowrap rounded-[9px] px-2.5 text-[13px] transition-colors",
+                  view === id ? "bg-surface font-semibold text-ink shadow-sm" : "font-medium text-[#5f5249] hover:text-ink",
                 )}
               >
                 <Icon className="h-3.5 w-3.5" />
@@ -188,16 +184,17 @@ function Inbox() {
                   <li key={conversation.id}>
                     <button
                       onClick={() => go({ c: conversation.id })}
+                      aria-current={selectedId === conversation.id ? "true" : undefined}
                       className={cx(
-                        "w-full px-4 py-3 text-left transition-colors",
-                        selectedId === conversation.id ? "bg-clay-soft/60" : "hover:bg-cream",
+                        "w-full border-l-[3px] px-4 py-3.5 text-left transition-colors",
+                        selectedId === conversation.id ? "border-clay bg-cream" : "border-transparent hover:bg-cream",
                       )}
                     >
                       <div className="flex items-center justify-between gap-2">
-                        <p className="truncate text-[13.5px] font-medium">
+                        <p className="truncate text-[14px] font-semibold">
                           {conversation.title ?? "Untitled conversation"}
                         </p>
-                        <span className="shrink-0 text-[11.5px] text-faint">
+                        <span className="shrink-0 text-[12px] text-muted">
                           {formatRelative(conversation.escalatedAt ?? conversation.lastMessageAt)}
                         </span>
                       </div>
@@ -257,20 +254,20 @@ function Stat({
   tone?: "clay";
 }) {
   return (
-    <Card className="flex items-center gap-3 px-4 py-3">
-      <span
-        className={cx(
-          "grid h-9 w-9 place-items-center rounded-xl",
-          tone === "clay" ? "bg-clay-soft text-clay" : "bg-sage-soft text-accent",
-        )}
-      >
-        {icon}
-      </span>
+    <Card className="flex items-start justify-between gap-3 px-5 py-4">
       <span>
-        <span className="block text-[12px] text-muted">{label}</span>
-        <span className="block font-display text-xl font-semibold leading-tight">
+        <span className="block text-[13px] font-medium text-muted">{label}</span>
+        <span
+          className={cx(
+            "mt-1 block font-display text-[28px] font-semibold leading-tight",
+            tone === "clay" && "text-clay-strong",
+          )}
+        >
           {value === undefined ? "…" : value}
         </span>
+      </span>
+      <span className="grid h-9 w-9 place-items-center rounded-xl bg-[#f3ece4] text-muted" aria-hidden>
+        {icon}
       </span>
     </Card>
   );
@@ -433,7 +430,7 @@ function Detail({
           </div>
         </div>
 
-        <div className="flex-1 space-y-4 overflow-y-auto bg-cream/60 p-5">
+        <div className="flex-1 space-y-4 overflow-y-auto bg-[#fffdfa] p-5">
           {messages.length === 0 && (
             <p className="py-8 text-center text-[13px] text-muted">No messages yet.</p>
           )}
@@ -441,8 +438,10 @@ function Detail({
             message.role === "USER" ? (
               <div key={message.id} className="flex justify-end">
                 <div className="max-w-[80%]">
-                  <p className="rounded-2xl rounded-br-md bg-clay-soft px-3.5 py-2.5 text-sm">{message.content}</p>
-                  <p className="mt-1 text-right text-[11px] text-faint">Visitor · {formatTime(message.createdAt)}</p>
+                  <p className="rounded-2xl rounded-br-[4px] bg-accent px-4 py-2.5 text-[14px] leading-normal text-white">
+                    {message.content}
+                  </p>
+                  <p className="mt-1 text-right text-[12px] text-muted">Visitor · {formatTime(message.createdAt)}</p>
                 </div>
               </div>
             ) : (
@@ -451,7 +450,7 @@ function Detail({
                   <LogoMark className="h-3.5 w-3.5 text-white" />
                 </span>
                 <div className="max-w-[85%]">
-                  <div className="rounded-2xl rounded-tl-md border border-line bg-surface px-3.5 py-2.5 text-sm whitespace-pre-wrap">
+                  <div className="whitespace-pre-wrap rounded-2xl rounded-bl-[4px] border border-line bg-cream px-4 py-2.5 text-[14px] leading-relaxed">
                     {message.content}
                     {message.citations.length > 0 && (
                       <div className="mt-2 flex flex-wrap gap-1.5 border-t border-line pt-2">

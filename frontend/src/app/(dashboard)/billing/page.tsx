@@ -62,6 +62,19 @@ export default function BillingPage() {
         <ErrorNote message={error} onRetry={reload} />
       ) : (
         <>
+          <section className="mb-5 flex flex-wrap items-start gap-4 rounded-2xl border border-dashed border-[#d9c6b3] bg-cream p-5">
+            <span className="grid h-11 w-11 shrink-0 place-items-center rounded-xl bg-clay-soft text-clay-strong">
+              <CreditCard className="h-5 w-5" />
+            </span>
+            <div className="min-w-0 flex-[1_1_360px]">
+              <p className="text-[16px] font-semibold">No plan or payment method yet</p>
+              <p className="mt-1 text-[14px] leading-normal text-muted">
+                No payment provider is wired up, so nothing here pretends to be one. The usage below is real: it
+                comes from the same records as Analytics, and it is what a plan would be metered on.
+              </p>
+            </div>
+          </section>
+
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
             <StatCard
               label="Conversations"
@@ -84,46 +97,39 @@ export default function BillingPage() {
           <Card className="mt-4">
             <CardHeader title="Usage by bot" />
             <div className="overflow-x-auto">
-              <table className="w-full text-sm">
+              <table className="w-full text-[14px]">
                 <thead>
-                  <tr className="border-b border-line text-left text-[12px] text-muted">
-                    <th className="px-5 py-3 font-medium">Bot</th>
-                    <th className="px-5 py-3 font-medium">Conversations</th>
-                    <th className="px-5 py-3 font-medium">Messages</th>
-                    <th className="px-5 py-3 font-medium">Tokens</th>
+                  <tr className="border-b border-line text-left text-[12px] font-semibold text-muted">
+                    <th className="px-5 py-3">Bot</th>
+                    <th className="px-5 py-3">Conversations</th>
+                    <th className="px-5 py-3">Messages</th>
+                    <th className="px-5 py-3">Tokens</th>
+                    <th className="px-5 py-3">Share of tokens</th>
                   </tr>
                 </thead>
                 <tbody>
-                  {(data?.bots ?? []).map((bot, index) => (
-                    <tr key={bot.id} className="border-b border-line last:border-0">
-                      <td className="px-5 py-3.5 font-medium">{bot.name}</td>
-                      <td className="px-5 py-3.5 text-muted">
-                        {formatNumber(data?.usage[index]?.totalConversations ?? 0)}
-                      </td>
-                      <td className="px-5 py-3.5 text-muted">
-                        {formatNumber(data?.usage[index]?.totalMessages ?? 0)}
-                      </td>
-                      <td className="px-5 py-3.5 text-muted">
-                        {formatNumber(data?.usage[index]?.totalTokens ?? 0)}
-                      </td>
-                    </tr>
-                  ))}
+                  {(data?.bots ?? []).map((bot, index) => {
+                    const tokens = data?.usage[index]?.totalTokens ?? 0;
+                    const share = totals.tokens > 0 ? Math.round((tokens / totals.tokens) * 100) : 0;
+                    return (
+                      <tr key={bot.id} className="border-b border-[#f3ece4] last:border-0">
+                        <td className="px-5 py-3.5 font-semibold">{bot.name}</td>
+                        <td className="px-5 py-3.5">{formatNumber(data?.usage[index]?.totalConversations ?? 0)}</td>
+                        <td className="px-5 py-3.5">{formatNumber(data?.usage[index]?.totalMessages ?? 0)}</td>
+                        <td className="px-5 py-3.5">{formatNumber(tokens)}</td>
+                        <td className="px-5 py-3.5">
+                          <span className="flex min-w-[180px] items-center gap-2.5">
+                            <span className="h-2 flex-1 overflow-hidden rounded-full bg-[#f3ece4]" aria-hidden>
+                              <span className="block h-full rounded-full bg-clay" style={{ width: `${share}%` }} />
+                            </span>
+                            <span className="w-10 text-[13px] text-muted">{share}%</span>
+                          </span>
+                        </td>
+                      </tr>
+                    );
+                  })}
                 </tbody>
               </table>
-            </div>
-          </Card>
-
-          <Card className="mt-4">
-            <div className="flex items-start gap-3 p-5">
-              <CreditCard className="mt-0.5 h-5 w-5 shrink-0 text-faint" />
-              <div className="text-[13px] leading-relaxed text-muted">
-                <p className="font-medium text-ink">No plan or payment method yet</p>
-                <p className="mt-1">
-                  No payment provider is wired up, so there is nothing here pretending to be
-                  one. The consumption above is real: it comes from the same usage records
-                  the analytics screen reads, and it is what a plan would be metered on.
-                </p>
-              </div>
             </div>
           </Card>
         </>

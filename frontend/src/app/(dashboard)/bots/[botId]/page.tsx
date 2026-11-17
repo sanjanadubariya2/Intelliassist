@@ -52,20 +52,48 @@ function BotDetail({ botId }: { botId: string }) {
 
   return (
     <>
-      <Link
-        href="/bots"
-        className="mb-4 inline-flex items-center gap-1.5 text-[13px] text-muted hover:text-ink"
-      >
-        <ArrowLeft className="h-3.5 w-3.5" />
-        All bots
-      </Link>
+      <nav aria-label="Breadcrumb" className="mb-4 flex items-center gap-1.5 text-[14px]">
+        <ArrowLeft className="h-3.5 w-3.5 text-muted" aria-hidden />
+        <Link href="/bots" className="font-medium text-accent hover:underline">
+          Bots
+        </Link>
+        <span className="text-muted">/ {bot.name}</span>
+      </nav>
 
-      <div className="mb-5 flex flex-wrap items-center gap-3">
-        <h1 className="font-display text-[28px] font-semibold tracking-tight">{bot.name}</h1>
-        <Badge tone={bot.status === "ACTIVE" ? "ok" : "warn"}>
-          {bot.status === "ACTIVE" ? "Online" : "Paused"}
-        </Badge>
-      </div>
+      <header className="mb-6 flex flex-wrap items-center gap-4">
+        <span className="grid h-[60px] w-[60px] shrink-0 place-items-center rounded-2xl bg-accent-soft font-display text-[26px] font-semibold text-accent">
+          {bot.name.slice(0, 1).toUpperCase()}
+        </span>
+        <div className="min-w-0 flex-[1_1_320px]">
+          <div className="flex flex-wrap items-center gap-2.5">
+            <h1 className="font-display text-[30px] font-semibold leading-tight tracking-tight sm:text-[32px]">
+              {bot.name}
+            </h1>
+            <Badge tone={bot.status === "ACTIVE" ? "ok" : "warn"}>
+              {bot.status === "ACTIVE" ? "Online" : "Paused"}
+            </Badge>
+          </div>
+          <p className="mt-1.5 text-[15px] text-muted">
+            {bot.description ?? `Answers in ${bot.defaultLanguage} from its own knowledge base.`}
+          </p>
+        </div>
+        <div className="flex flex-wrap gap-2.5">
+          <button
+            type="button"
+            onClick={() => setTab("playground")}
+            className="inline-flex min-h-11 items-center rounded-xl border border-[#e2d4c5] bg-surface px-4 text-sm font-semibold hover:bg-cream"
+          >
+            Test in playground
+          </button>
+          <button
+            type="button"
+            onClick={() => setTab("settings")}
+            className="inline-flex min-h-11 items-center rounded-xl bg-accent px-4 text-sm font-semibold text-white hover:bg-accent-strong"
+          >
+            Bot settings
+          </button>
+        </div>
+      </header>
 
       <Tabs tabs={TABS} value={tab} onChange={setTab} />
 

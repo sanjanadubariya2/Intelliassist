@@ -1,95 +1,118 @@
 "use client";
 
 import Link from "next/link";
-import { Code2, Globe, Puzzle } from "lucide-react";
-import { Badge, Card, CardHeader, PageHeader } from "@/components/ui";
+import { Badge, PageHeader, cx } from "@/components/ui";
 
 /**
  * Integrations.
  *
  * Only two of these exist, and they are the ones that matter: the embeddable
- * widget and the API behind it. The rest are listed as not built rather than
- * shown as toggles that do nothing — a switch that silently fails is worse
- * than an absent feature, because someone will believe it worked.
+ * widget and the API behind it. The rest are shown as "not built" cards with
+ * no button, rather than as toggles that do nothing: a switch that silently
+ * fails is worse than an absent feature, because someone will believe it
+ * worked.
  */
-const AVAILABLE = [
+interface Integration {
+  mono: string;
+  name: string;
+  description: string;
+  /** Present only for integrations that exist. */
+  href?: string;
+}
+
+const GROUPS: Array<{ title: string; items: Integration[] }> = [
   {
-    name: "Website widget",
-    description:
-      "One script tag on any page. Streams answers with citations, isolated in an iframe so your CSS and ours cannot collide.",
-    icon: <Code2 className="h-5 w-5" />,
-    href: "/studio?tab=install",
+    title: "Channels",
+    items: [
+      {
+        mono: "W",
+        name: "Website widget",
+        description:
+          "One script tag on any page. Streams answers with citations, isolated in an iframe so your CSS and ours cannot collide.",
+        href: "/studio?tab=install",
+      },
+      { mono: "S", name: "Slack", description: "Answer questions in a shared channel." },
+      { mono: "W", name: "WhatsApp", description: "Reply to customers on your WhatsApp Business number." },
+      { mono: "T", name: "Microsoft Teams", description: "Let staff ask the bot inside Teams." },
+    ],
   },
   {
-    name: "Public REST API",
-    description:
-      "The endpoints the widget itself calls. Authenticated by a bot key and restricted to your allowed domains.",
-    icon: <Globe className="h-5 w-5" />,
-    href: "/studio?tab=install",
+    title: "Helpdesk and developer",
+    items: [
+      {
+        mono: "A",
+        name: "Public REST API",
+        description:
+          "The endpoints the widget itself calls. Authenticated by a bot key and restricted to your allowed domains.",
+        href: "/studio?tab=install",
+      },
+      { mono: "I", name: "Intercom", description: "Hand conversations over to Intercom when a person is needed." },
+      { mono: "Z", name: "Zendesk", description: "Create a ticket for every handoff, with the transcript attached." },
+      { mono: "H", name: "Webhooks", description: "Get a request when a conversation starts, hands off or closes." },
+    ],
   },
 ];
-
-const NOT_BUILT = ["Slack", "Microsoft Teams", "Zendesk", "Intercom", "WhatsApp", "Webhooks"];
 
 export default function IntegrationsPage() {
   return (
     <>
-      <PageHeader title="Integrations" description="Where your assistants can be reached from." />
+      <PageHeader
+        title="Integrations"
+        description="Where your assistants can be reached, and where what they learn can go."
+      />
 
-      <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
-        {AVAILABLE.map((integration) => (
-          <Card key={integration.name} className="p-5">
-            <div className="flex items-start gap-3">
-              <span className="grid h-10 w-10 shrink-0 place-items-center rounded-lg bg-clay-soft text-clay">
-                {integration.icon}
-              </span>
-              <div className="min-w-0 flex-1">
-                <div className="flex items-center gap-2">
-                  <h2 className="text-sm font-semibold">{integration.name}</h2>
-                  <Badge tone="ok">Available</Badge>
-                </div>
-                <p className="mt-1 text-[13px] leading-relaxed text-muted">
-                  {integration.description}
-                </p>
-                <Link
-                  href={integration.href}
-                  className="mt-3 inline-block text-[13px] font-medium text-clay hover:underline"
-                >
-                  Set up
-                </Link>
-              </div>
+      <div className="flex flex-col gap-8">
+        {GROUPS.map((group) => (
+          <section key={group.title}>
+            <h2 className="mb-3 text-[12px] font-semibold uppercase tracking-[0.06em] text-muted">{group.title}</h2>
+            <div className="grid grid-cols-[repeat(auto-fill,minmax(300px,1fr))] gap-4">
+              {group.items.map((integration) => (
+                <IntegrationCard key={integration.name} integration={integration} />
+              ))}
             </div>
-          </Card>
+          </section>
         ))}
       </div>
 
-      <Card className="mt-4">
-        <CardHeader
-          title="Not built"
-          description="Listed so you can see where the edges are, rather than shown as switches that do nothing."
-        />
-        <div className="flex flex-wrap gap-2 p-5">
-          {NOT_BUILT.map((name) => (
-            <span
-              key={name}
-              className="rounded-lg border border-line px-3 py-1.5 text-[13px] text-faint"
-            >
-              {name}
-            </span>
-          ))}
-        </div>
-      </Card>
-
-      <Card className="mt-4">
-        <div className="flex items-start gap-3 p-5">
-          <Puzzle className="mt-0.5 h-5 w-5 shrink-0 text-faint" />
-          <p className="text-[13px] leading-relaxed text-muted">
-            Each of those is a real piece of work — an OAuth flow, a message format, and
-            somewhere for delivery failures to go. The widget and the REST API cover the case
-            this product is actually for, so they came first.
-          </p>
-        </div>
-      </Card>
+      <p className="mt-8 max-w-3xl text-[13px] leading-relaxed text-muted">
+        Each unbuilt integration is a real piece of work: an OAuth flow, a message format, and somewhere for
+        delivery failures to go. The widget and the REST API cover the case this product is for, so they came first.
+      </p>
     </>
+  );
+}
+
+function IntegrationCard({ integration }: { integration: Integration }) {
+  const available = Boolean(integration.href);
+  return (
+    <article
+      className={cx(
+        "flex flex-col gap-3.5 rounded-2xl border p-5",
+        available ? "border-line bg-surface shadow-soft" : "border-dashed border-[#e2d4c5] bg-cream/60",
+      )}
+    >
+      <div className="flex items-center gap-3">
+        <span
+          className={cx(
+            "grid h-11 w-11 shrink-0 place-items-center rounded-xl text-[16px] font-semibold",
+            available ? "bg-accent-soft text-accent" : "bg-[#f3ece4] text-[#5f5249]",
+          )}
+          aria-hidden
+        >
+          {integration.mono}
+        </span>
+        <h3 className="min-w-0 flex-1 text-[16px] font-semibold">{integration.name}</h3>
+        {available ? <Badge tone="ok">Available</Badge> : <Badge>Not built yet</Badge>}
+      </div>
+      <p className="flex-1 text-[14px] leading-normal text-[#4a3d35]">{integration.description}</p>
+      {available && (
+        <Link
+          href={integration.href!}
+          className="inline-flex min-h-11 items-center self-start rounded-xl bg-accent px-4 text-sm font-semibold text-white hover:bg-accent-strong"
+        >
+          Set up
+        </Link>
+      )}
+    </article>
   );
 }
