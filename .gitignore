@@ -21,6 +21,10 @@ htmlcov/
 *.log
 uploads/
 models/
+# ...but not the AI service's SQLAlchemy models, which are source code. The
+# rule above is for downloaded model files; it hid this package, so CI could
+# not import app.models.
+!ai-service/app/models/
 
 # --- editors / os ---
 .vscode/
