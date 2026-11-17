@@ -3,11 +3,13 @@
 import { CreditCard, MessagesSquare, Sparkles } from "lucide-react";
 import { api, type Bot, type BotUsage } from "@/lib/api";
 import { useAsync } from "@/lib/hooks";
+import { utcMonthStart, utcToday } from "@/lib/dates";
 import {
   Card,
   CardHeader,
   ErrorNote,
   Loading,
+  PageHeader,
   StatCard,
   formatNumber,
 } from "@/components/ui";
@@ -23,9 +25,10 @@ import {
 async function loadBilling(): Promise<{ bots: Bot[]; usage: BotUsage[] }> {
   const bots = (await api.bots.list()).items;
 
-  const now = new Date();
-  const from = new Date(now.getFullYear(), now.getMonth(), 1).toISOString().slice(0, 10);
-  const to = now.toISOString().slice(0, 10);
+  // UTC month boundaries, as the backend counts usage. The local-time version
+  // turned "1 November" into "31 October" east of Greenwich.
+  const from = utcMonthStart();
+  const to = utcToday();
 
   const usage = await Promise.all(bots.map((bot) => api.usage.forBot(bot.id, from, to)));
   return { bots, usage };
@@ -34,7 +37,11 @@ async function loadBilling(): Promise<{ bots: Bot[]; usage: BotUsage[] }> {
 export default function BillingPage() {
   const { data, loading, error, reload } = useAsync(loadBilling);
 
-  const month = new Date().toLocaleDateString(undefined, { month: "long", year: "numeric" });
+  const month = new Date().toLocaleDateString(undefined, {
+    month: "long",
+    year: "numeric",
+    timeZone: "UTC",
+  });
 
   const totals = (data?.usage ?? []).reduce(
     (sum, usage) => ({
@@ -47,10 +54,7 @@ export default function BillingPage() {
 
   return (
     <>
-      <div className="mb-5">
-        <h1 className="text-xl font-semibold tracking-tight">Billing</h1>
-        <p className="mt-0.5 text-[13px] text-muted">Your usage so far in {month}.</p>
-      </div>
+      <PageHeader title="Billing" description={`Your usage so far in ${month} (UTC).`} />
 
       {loading ? (
         <Loading />

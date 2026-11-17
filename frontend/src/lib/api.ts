@@ -21,7 +21,23 @@ export type ConversationStatus = "ACTIVE" | "CLOSED";
 export type ConversationResolution = "UNRESOLVED" | "RESOLVED" | "ESCALATED";
 export type WidgetPosition = "BOTTOM_RIGHT" | "BOTTOM_LEFT" | "TOP_RIGHT" | "TOP_LEFT";
 export type LauncherIcon = "CHAT" | "MESSAGE" | "HELP" | "SPARKLE";
-export type DocumentStatus = "PENDING" | "PROCESSING" | "INDEXED" | "FAILED";
+/**
+ * Mirrors the backend's DocumentStatus exactly. The three middle stages are
+ * reported while the AI service works through a file; the UI must handle all
+ * of them, because an unknown status used to crash the knowledge screens.
+ */
+export type DocumentStatus =
+  | "PENDING"
+  | "EXTRACTING"
+  | "CHUNKING"
+  | "EMBEDDING"
+  | "INDEXED"
+  | "FAILED";
+
+/** Still moving: worth polling. */
+export function isIndexing(status: DocumentStatus) {
+  return status !== "INDEXED" && status !== "FAILED";
+}
 export type MessageRole = "USER" | "ASSISTANT";
 
 export interface AuthResponse {
@@ -93,6 +109,7 @@ export interface Document {
 export interface Conversation {
   id: string;
   botId: string;
+  botName: string;
   visitorId: string | null;
   title: string | null;
   status: ConversationStatus;
@@ -100,6 +117,86 @@ export interface Conversation {
   messageCount: number;
   startedAt: string;
   lastMessageAt: string | null;
+  /** The teammate handling a handed-off conversation. Null: the shared queue. */
+  assigneeId: string | null;
+  assigneeName: string | null;
+  /** First escalation. Never cleared, so resolved handoffs stay countable. */
+  escalatedAt: string | null;
+  resolvedAt: string | null;
+}
+
+export type InboxView = "OPEN" | "MINE" | "UNASSIGNED" | "CLOSED";
+
+export interface InboxSummary {
+  open: number;
+  mine: number;
+  unassigned: number;
+  resolvedLast30Days: number;
+  /** Null when nothing was resolved in the window. */
+  medianResolutionMinutes: number | null;
+}
+
+export interface QuestionCluster {
+  question: string;
+  count: number;
+  unansweredCount: number;
+  lastAskedAt: string;
+}
+
+export interface ResolutionDay {
+  date: string;
+  started: number;
+  resolved: number;
+  escalated: number;
+  open: number;
+}
+
+export interface ConversationInsights {
+  from: string;
+  to: string;
+  totalQuestions: number;
+  answeredQuestions: number;
+  unansweredQuestions: number;
+  answerRate: number | null;
+  totalConversations: number;
+  resolvedConversations: number;
+  escalatedConversations: number;
+  openConversations: number;
+  /** resolved / (resolved + escalated). A proxy: there is no visitor rating. */
+  satisfactionRate: number | null;
+  topQuestions: QuestionCluster[];
+  unansweredTopics: QuestionCluster[];
+  trend: ResolutionDay[];
+  truncated: boolean;
+}
+
+export type HealthIssueType =
+  | "EMPTY_KNOWLEDGE_BASE"
+  | "FAILED"
+  | "STUCK"
+  | "NO_CONTENT"
+  | "CONFLICTING_VERSIONS"
+  | "DUPLICATE"
+  | "OUTDATED";
+
+export interface HealthIssue {
+  type: HealthIssueType;
+  severity: "HIGH" | "MEDIUM" | "LOW";
+  title: string;
+  detail: string;
+  recommendation: string;
+  documentIds: string[];
+  filenames: string[];
+}
+
+export interface KnowledgeHealth {
+  score: number;
+  documentCount: number;
+  indexedCount: number;
+  totalChunks: number;
+  issues: HealthIssue[];
+  suggestedFaqs: Array<{ question: string; timesAsked: number; lastAskedAt: string }>;
+  checkedAt: string;
 }
 
 export interface Citation {
@@ -368,7 +465,18 @@ async function request<T>(path: string, options: RequestOptions = {}): Promise<T
     );
   }
 
-  if (!response.ok) throw await toError(response);
+  if (!response.ok) {
+    const error = await toError(response);
+    // A token that was valid at sign-in has expired (they last 12 hours).
+    // Every screen would otherwise show a bare 401 with no way forward, so the
+    // session is ended and the user sent to sign in again. Not for the auth
+    // calls themselves, whose 401 means "wrong password".
+    if (error.isUnauthorized && token && !path.startsWith("/auth/") && typeof window !== "undefined") {
+      tokenStore.clear();
+      window.location.assign("/login?expired=1");
+    }
+    throw error;
+  }
 
   // 204, and any other empty success.
   if (response.status === 204 || response.headers.get("Content-Length") === "0") {
@@ -496,6 +604,32 @@ export const api = {
 
     addNote: (conversationId: string, body: string) =>
       request<ConversationNote>(`/conversations/${conversationId}/notes`, { body: { body } }),
+  },
+
+  handoff: {
+    list: (view: InboxView, page = 0, size = 50) =>
+      request<Page<Conversation>>(`/handoff/conversations?view=${view}&page=${page}&size=${size}`),
+
+    summary: () => request<InboxSummary>("/handoff/summary"),
+
+    /** Null returns it to the shared queue. Assigning an open conversation escalates it. */
+    assign: (conversationId: string, assigneeId: string | null) =>
+      request<Conversation>(`/conversations/${conversationId}/assignee`, {
+        method: "PATCH",
+        body: { assigneeId },
+      }),
+  },
+
+  insights: {
+    forBot: (botId: string, from?: string, to?: string) => {
+      const query = new URLSearchParams();
+      if (from) query.set("from", from);
+      if (to) query.set("to", to);
+      const suffix = query.toString() ? `?${query}` : "";
+      return request<ConversationInsights>(`/bots/${botId}/insights${suffix}`);
+    },
+
+    health: (botId: string) => request<KnowledgeHealth>(`/bots/${botId}/knowledge/health`),
   },
 
   members: {

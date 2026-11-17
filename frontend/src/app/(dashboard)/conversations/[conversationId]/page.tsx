@@ -2,12 +2,13 @@
 
 import { use, useState } from "react";
 import Link from "next/link";
-import { ArrowLeft, FileText, StickyNote } from "lucide-react";
+import { ArrowLeft, FileText, Inbox, StickyNote } from "lucide-react";
 import {
   api,
   type Conversation,
   type ConversationNote,
   type ConversationResolution,
+  type Member,
   type Message,
 } from "@/lib/api";
 import { useAsync } from "@/lib/hooks";
@@ -20,17 +21,20 @@ import {
   ErrorNote,
   Loading,
   ResolutionBadge,
+  Select,
   Textarea,
   cx,
   formatDate,
   formatRelative,
   formatTime,
+  notify,
 } from "@/components/ui";
 
 interface Transcript {
   conversation: Conversation;
   messages: Message[];
   notes: ConversationNote[];
+  members: Member[];
 }
 
 export default function ConversationPage({
@@ -41,19 +45,20 @@ export default function ConversationPage({
   const { conversationId } = use(params);
 
   const { data, loading, error, reload } = useAsync<Transcript>(async () => {
-    const [conversation, messages, notes] = await Promise.all([
+    const [conversation, messages, notes, members] = await Promise.all([
       api.conversations.get(conversationId),
       api.conversations.messages(conversationId),
       api.conversations.notes(conversationId),
+      api.members.list(),
     ]);
-    return { conversation, messages, notes };
+    return { conversation, messages, notes, members };
   }, [conversationId]);
 
   if (loading) return <Loading />;
   if (error) return <ErrorNote message={error} onRetry={reload} />;
   if (!data) return null;
 
-  const { conversation, messages, notes } = data;
+  const { conversation, messages, notes, members } = data;
 
   return (
     <>
@@ -67,19 +72,24 @@ export default function ConversationPage({
 
       <div className="mb-5 flex flex-wrap items-start justify-between gap-3">
         <div>
-          <h1 className="text-xl font-semibold tracking-tight">
+          <h1 className="font-display text-[26px] font-semibold tracking-tight">
             {conversation.visitorId
               ? `Visitor ${conversation.visitorId.slice(0, 10)}`
               : "Conversation"}
           </h1>
           <p className="mt-0.5 text-[13px] text-muted">
-            {conversation.title ?? "Untitled"} · started {formatDate(conversation.startedAt)} ·{" "}
-            {conversation.messageCount} messages
+            {conversation.title ?? "Untitled"} · {conversation.botName} · started{" "}
+            {formatDate(conversation.startedAt)} · {conversation.messageCount} messages
           </p>
         </div>
 
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2">
           <ResolutionBadge resolution={conversation.resolution} />
+          <AssigneeControl
+            conversation={conversation}
+            members={members}
+            onChanged={reload}
+          />
           <ResolutionControls
             conversationId={conversationId}
             current={conversation.resolution}
@@ -90,8 +100,13 @@ export default function ConversationPage({
               size="sm"
               variant="secondary"
               onClick={async () => {
-                await api.conversations.close(conversationId);
-                reload();
+                try {
+                  await api.conversations.close(conversationId);
+                  notify.success("Conversation closed");
+                  reload();
+                } catch (caught) {
+                  notify.failure(caught, "Could not close the conversation.");
+                }
               }}
             >
               Close
@@ -103,12 +118,12 @@ export default function ConversationPage({
       <div className="grid grid-cols-1 gap-4 xl:grid-cols-[minmax(0,1fr)_340px]">
         <Card>
           <CardHeader title="Transcript" />
-          <div className="space-y-5 bg-canvas p-5">
+          <div className="space-y-5 bg-cream/60 p-5">
             {messages.map((message) =>
               message.role === "USER" ? (
                 <div key={message.id} className="flex justify-end">
                   <div className="max-w-[78%]">
-                    <p className="rounded-2xl rounded-br-md bg-accent px-3.5 py-2.5 text-sm text-white">
+                    <p className="rounded-2xl rounded-br-md bg-clay-soft px-3.5 py-2.5 text-sm">
                       {message.content}
                     </p>
                     <p className="mt-1 text-right text-[11.5px] text-faint">
@@ -182,7 +197,16 @@ function ResolutionControls({
     setBusy(true);
     try {
       await api.conversations.resolve(conversationId, resolution);
+      notify.success(
+        resolution === "ESCALATED"
+          ? "Escalated: it's in the Handoff Inbox"
+          : resolution === "RESOLVED"
+            ? "Marked resolved"
+            : "Reopened",
+      );
       onChanged();
+    } catch (caught) {
+      notify.failure(caught, "Could not update the conversation.");
     } finally {
       setBusy(false);
     }
@@ -204,6 +228,65 @@ function ResolutionControls({
         <Button size="sm" variant="ghost" loading={busy} onClick={() => set("UNRESOLVED")}>
           Reopen
         </Button>
+      )}
+    </div>
+  );
+}
+
+/**
+ * Who on the team owns this conversation.
+ *
+ * Assigning a conversation that was never escalated escalates it, so it shows
+ * up in the Handoff Inbox; the backend does that, this only reflects it.
+ */
+function AssigneeControl({
+  conversation,
+  members,
+  onChanged,
+}: {
+  conversation: Conversation;
+  members: Member[];
+  onChanged: () => void;
+}) {
+  const [busy, setBusy] = useState(false);
+
+  return (
+    <div className="flex items-center gap-1.5">
+      <Select
+        value={conversation.assigneeId ?? ""}
+        disabled={busy}
+        aria-label="Assignee"
+        className="w-auto py-1.5 text-[13px]"
+        onChange={async (event) => {
+          const next = event.target.value || null;
+          setBusy(true);
+          try {
+            await api.handoff.assign(conversation.id, next);
+            notify.success(next ? "Assigned" : "Returned to the queue");
+            onChanged();
+          } catch (caught) {
+            notify.failure(caught, "Could not assign the conversation.");
+          } finally {
+            setBusy(false);
+          }
+        }}
+      >
+        <option value="">Unassigned</option>
+        {members.map((member) => (
+          <option key={member.userId} value={member.userId}>
+            {member.name}
+          </option>
+        ))}
+      </Select>
+      {conversation.resolution === "ESCALATED" && (
+        <Link
+          href={`/inbox?c=${conversation.id}`}
+          title="Open in the Handoff Inbox"
+          aria-label="Open in the Handoff Inbox"
+          className="rounded-lg p-1.5 text-muted hover:bg-cream hover:text-ink"
+        >
+          <Inbox className="h-4 w-4" />
+        </Link>
       )}
     </div>
   );

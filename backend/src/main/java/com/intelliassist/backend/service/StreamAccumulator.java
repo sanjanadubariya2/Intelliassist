@@ -140,8 +140,17 @@ public class StreamAccumulator {
         return List.copyOf(citations);
     }
 
+    /**
+     * Whether the answer actually came from a document.
+     *
+     * <p>The AI service reports grounded when retrieval cleared its threshold,
+     * but the model can still decline ("I don't have information about
+     * that"). Such an answer cites nothing, and counting it as grounded hid
+     * every one of those gaps from analytics, insights and the health check.
+     * An answer is grounded only if it cites a source.
+     */
     public boolean grounded() {
-        return grounded;
+        return grounded && !citations.isEmpty();
     }
 
     public String model() {

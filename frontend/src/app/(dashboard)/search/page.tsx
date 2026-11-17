@@ -12,6 +12,7 @@ import {
   Empty,
   ErrorNote,
   Loading,
+  PageHeader,
   ResolutionBadge,
   formatRelative,
 } from "@/components/ui";
@@ -82,14 +83,14 @@ function SearchResults() {
 
   return (
     <>
-      <div className="mb-5">
-        <h1 className="text-xl font-semibold tracking-tight">
-          Results for <span className="text-accent">{term}</span>
-        </h1>
-        <p className="mt-0.5 text-[13px] text-muted">
-          Matches bot names and conversation titles. Message contents are not searched.
-        </p>
-      </div>
+      <PageHeader
+        title={
+          <>
+            Results for <em className="font-medium text-clay">{term}</em>
+          </>
+        }
+        description="Matches bot names and conversation titles. Message contents are not searched."
+      />
 
       {loading ? (
         <Loading />
@@ -113,7 +114,7 @@ function SearchResults() {
                   <li key={bot.id}>
                     <Link
                       href={`/bots/${bot.id}`}
-                      className="flex items-center gap-3 px-5 py-3.5 hover:bg-canvas"
+                      className="flex items-center gap-3 px-5 py-3.5 hover:bg-cream"
                     >
                       <BotIcon className="h-4 w-4 shrink-0 text-faint" />
                       <span className="min-w-0 flex-1">
@@ -139,7 +140,7 @@ function SearchResults() {
                   <li key={conversation.id}>
                     <Link
                       href={`/conversations/${conversation.id}`}
-                      className="flex items-center gap-3 px-5 py-3.5 hover:bg-canvas"
+                      className="flex items-center gap-3 px-5 py-3.5 hover:bg-cream"
                     >
                       <MessagesSquare className="h-4 w-4 shrink-0 text-faint" />
                       <span className="min-w-0 flex-1">

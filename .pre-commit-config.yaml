@@ -37,12 +37,36 @@ repos:
         pass_filenames: false
         require_serial: true
 
+  # The same three pre-commit-hooks checks, run as `python -m` modules rather
+  # than through the console-script .exe files pip generates. Windows Smart
+  # App Control blocks some of those unsigned .exe files by reputation, while
+  # the venv's python.exe is allowed, so this form runs everywhere.
+  - repo: local
+    hooks:
+      - id: end-of-file-fixer
+        name: fix end of files
+        entry: python -m pre_commit_hooks.end_of_file_fixer
+        language: python
+        additional_dependencies: [pre-commit-hooks==5.0.0]
+        types: [text]
+
+      - id: trailing-whitespace
+        name: trim trailing whitespace
+        entry: python -m pre_commit_hooks.trailing_whitespace_fixer
+        language: python
+        additional_dependencies: [pre-commit-hooks==5.0.0]
+        types: [text]
+
+      - id: check-merge-conflict
+        name: check for merge conflicts
+        entry: python -m pre_commit_hooks.check_merge_conflict
+        language: python
+        additional_dependencies: [pre-commit-hooks==5.0.0]
+        types: [text]
+
   - repo: https://github.com/pre-commit/pre-commit-hooks
     rev: v5.0.0
     hooks:
-      - id: end-of-file-fixer
-      - id: trailing-whitespace
-      - id: check-merge-conflict
       - id: check-added-large-files
         args: [--maxkb=1024]
       - id: detect-private-key

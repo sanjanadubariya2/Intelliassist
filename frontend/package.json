@@ -10,7 +10,8 @@
     "typecheck": "tsc --noEmit",
     "clean": "node -e \"require('fs').rmSync('.next',{recursive:true,force:true})\"",
     "predev": "node scripts/reset-stale-build.mjs dev",
-    "prebuild": "node scripts/reset-stale-build.mjs build"
+    "prebuild": "node scripts/reset-stale-build.mjs build",
+    "test": "node --experimental-strip-types --disable-warning=MODULE_TYPELESS_PACKAGE_JSON --disable-warning=ExperimentalWarning --test src/lib/intelli.test.ts"
   },
   "dependencies": {
     "lucide-react": "0.544.0",

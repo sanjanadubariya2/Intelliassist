@@ -16,6 +16,7 @@ import {
   Loading,
   Modal,
   formatRelative,
+  notify,
 } from "@/components/ui";
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8080";
@@ -78,8 +79,13 @@ export function BotEmbed({ botId }: { botId: string }) {
                 </span>
                 <button
                   onClick={async () => {
-                    await api.credentials.removeDomain(domain.id);
-                    domains.reload();
+                    try {
+                      await api.credentials.removeDomain(domain.id);
+                      notify.success(`${domain.domain} removed`);
+                      domains.reload();
+                    } catch (caught) {
+                      notify.failure(caught, "Could not remove the domain.");
+                    }
                   }}
                   aria-label={`Remove ${domain.domain}`}
                   className="rounded-md p-1.5 text-faint hover:bg-bad-soft hover:text-bad"
@@ -134,8 +140,13 @@ export function BotEmbed({ botId }: { botId: string }) {
                     size="sm"
                     variant="danger"
                     onClick={async () => {
-                      await api.credentials.revokeKey(key.id);
-                      keys.reload();
+                      try {
+                        await api.credentials.revokeKey(key.id);
+                        notify.success(`Revoked ${key.name}`);
+                        keys.reload();
+                      } catch (caught) {
+                        notify.failure(caught, "Could not revoke the key.");
+                      }
                     }}
                   >
                     Revoke
@@ -172,7 +183,7 @@ function Snippet({ botKey, masked }: { botKey: string; masked: boolean }) {
 
   return (
     <div className="relative">
-      <pre className="overflow-x-auto rounded-lg bg-ink px-4 py-3.5 text-[12.5px] leading-relaxed text-white/90">
+      <pre className="overflow-x-auto rounded-xl bg-[#1d2a24] px-4 py-3.5 pr-24 text-[12.5px] leading-relaxed text-[#e9f0ea]">
         <code>{snippet}</code>
       </pre>
       <div className="absolute right-2 top-2">

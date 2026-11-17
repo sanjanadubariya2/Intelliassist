@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useAuth } from "@/lib/auth";
@@ -15,6 +15,14 @@ export default function LoginPage() {
   const [password, setPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const [expired, setExpired] = useState(false);
+
+  // Set by the API client when a token runs out mid-session. Read from
+  // location in an effect rather than useSearchParams, which would need a
+  // Suspense boundary around the whole form.
+  useEffect(() => {
+    setExpired(new URLSearchParams(window.location.search).has("expired"));
+  }, []);
 
   async function onSubmit(event: React.FormEvent) {
     event.preventDefault();
@@ -44,8 +52,14 @@ export default function LoginPage() {
 
   return (
     <>
-      <h1 className="text-lg font-semibold">Sign in</h1>
+      <h1 className="font-display text-[26px] font-semibold tracking-tight">Sign in</h1>
       <p className="mt-1 mb-5 text-[13px] text-muted">Welcome back.</p>
+
+      {expired && (
+        <p className="mb-4 rounded-xl bg-warn-soft px-3 py-2 text-[13px] text-warn" role="status">
+          Your session expired. Sign in again to pick up where you left off.
+        </p>
+      )}
 
       <form onSubmit={onSubmit} className="space-y-4">
         <Field label="Email">
@@ -83,7 +97,7 @@ export default function LoginPage() {
 
       <p className="mt-5 text-center text-[13px] text-muted">
         No account?{" "}
-        <Link href="/register" className="font-medium text-accent hover:underline">
+        <Link href="/register" className="font-medium text-clay hover:underline">
           Create one
         </Link>
       </p>

@@ -16,6 +16,8 @@ import {
 } from "recharts";
 import { api, type Bot, type BotUsage } from "@/lib/api";
 import { useAsync } from "@/lib/hooks";
+import { shortDay, utcDaysAgo, utcToday } from "@/lib/dates";
+import { chart, chartAxis, chartTooltip } from "@/lib/theme";
 import { AiQuality } from "@/components/ai-quality";
 import {
   Card,
@@ -23,6 +25,7 @@ import {
   Empty,
   ErrorNote,
   Loading,
+  PageHeader,
   Select,
   StatCard,
   formatNumber,
@@ -35,12 +38,6 @@ const RANGES = [
   { days: 90, label: "Last 90 days" },
 ] as const;
 
-function isoDaysAgo(days: number) {
-  const date = new Date();
-  date.setDate(date.getDate() - days);
-  return date.toISOString().slice(0, 10);
-}
-
 interface Analytics {
   bots: Bot[];
   usage: BotUsage[];
@@ -50,8 +47,8 @@ async function loadAnalytics(botId: string | "all", days: number): Promise<Analy
   const bots = (await api.bots.list()).items;
   const wanted = botId === "all" ? bots : bots.filter((bot) => bot.id === botId);
 
-  const from = isoDaysAgo(days - 1);
-  const to = new Date().toISOString().slice(0, 10);
+  const from = utcDaysAgo(days - 1);
+  const to = utcToday();
   const usage = await Promise.all(wanted.map((bot) => api.usage.forBot(bot.id, from, to)));
 
   return { bots, usage };
@@ -68,14 +65,10 @@ export default function AnalyticsPage() {
 
   return (
     <>
-      <div className="mb-5 flex flex-wrap items-end justify-between gap-4">
-        <div>
-          <h1 className="text-xl font-semibold tracking-tight">Analytics</h1>
-          <p className="mt-0.5 text-[13px] text-muted">
-            How much your bots are used, and how often they can actually answer.
-          </p>
-        </div>
-
+      <PageHeader
+        title="Analytics"
+        description="How much your bots are used, and how often they can actually answer."
+        action={
         <div className="flex gap-2">
           {data && data.bots.length > 1 && (
             <Select value={botId} onChange={(event) => setBotId(event.target.value)}>
@@ -95,7 +88,8 @@ export default function AnalyticsPage() {
             ))}
           </Select>
         </div>
-      </div>
+        }
+      />
 
       {loading ? (
         <Loading />
@@ -114,7 +108,7 @@ export default function AnalyticsPage() {
           <AnalyticsBody usage={data.usage} />
 
           <div className="mt-8">
-            <h2 className="text-lg font-semibold tracking-tight">AI quality</h2>
+            <h2 className="font-display text-xl font-semibold tracking-tight">AI quality</h2>
             <p className="mt-0.5 mb-4 text-[13px] text-muted">
               Measured by running a fixed set of test questions with known answers. Separate
               from live traffic, so these numbers describe the pipeline rather than how busy
@@ -175,10 +169,9 @@ function AnalyticsBody({ usage }: { usage: BotUsage[] }) {
   }
   const series = [...byDate.values()].sort((a, b) => a.date.localeCompare(b.date));
 
-  const axis = { fontSize: 11, fill: "#9a9ab0" };
-  const tick = (value: string) =>
-    new Date(value).toLocaleDateString(undefined, { day: "numeric", month: "short" });
-  const tooltip = { borderRadius: 10, border: "1px solid #e9e9f2", fontSize: 12 };
+  const axis = chartAxis;
+  const tick = shortDay;
+  const tooltip = chartTooltip;
 
   return (
     <>
@@ -218,11 +211,11 @@ function AnalyticsBody({ usage }: { usage: BotUsage[] }) {
               <AreaChart data={series} margin={{ top: 4, right: 8, bottom: 0, left: -20 }}>
                 <defs>
                   <linearGradient id="fillA" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="0%" stopColor="#7c5aed" stopOpacity={0.28} />
-                    <stop offset="100%" stopColor="#7c5aed" stopOpacity={0} />
+                    <stop offset="0%" stopColor={chart.primary} stopOpacity={0.25} />
+                    <stop offset="100%" stopColor={chart.primary} stopOpacity={0} />
                   </linearGradient>
                 </defs>
-                <CartesianGrid stroke="#e9e9f2" vertical={false} />
+                <CartesianGrid stroke={chart.grid} vertical={false} />
                 <XAxis
                   dataKey="date"
                   tick={axis}
@@ -231,11 +224,11 @@ function AnalyticsBody({ usage }: { usage: BotUsage[] }) {
                   tickFormatter={tick}
                 />
                 <YAxis tick={axis} tickLine={false} axisLine={false} allowDecimals={false} />
-                <Tooltip contentStyle={tooltip} />
+                <Tooltip contentStyle={tooltip} labelFormatter={(value) => shortDay(String(value))} />
                 <Area
                   type="monotone"
                   dataKey="conversations"
-                  stroke="#7c5aed"
+                  stroke={chart.primary}
                   strokeWidth={2}
                   fill="url(#fillA)"
                 />
@@ -256,7 +249,7 @@ function AnalyticsBody({ usage }: { usage: BotUsage[] }) {
           ) : (
             <ResponsiveContainer width="100%" height={240}>
               <BarChart data={series} margin={{ top: 4, right: 8, bottom: 0, left: -20 }}>
-                <CartesianGrid stroke="#e9e9f2" vertical={false} />
+                <CartesianGrid stroke={chart.grid} vertical={false} />
                 <XAxis
                   dataKey="date"
                   tick={axis}
@@ -265,7 +258,7 @@ function AnalyticsBody({ usage }: { usage: BotUsage[] }) {
                   tickFormatter={tick}
                 />
                 <YAxis tick={axis} tickLine={false} axisLine={false} allowDecimals={false} />
-                <Tooltip contentStyle={tooltip} />
+                <Tooltip contentStyle={tooltip} labelFormatter={(value) => shortDay(String(value))} />
                 <Legend wrapperStyle={{ fontSize: 12 }} />
                 {/* Stacked, because the pair is the total answers for that day
                     and the eye should read the split, not two separate series. */}
@@ -273,14 +266,14 @@ function AnalyticsBody({ usage }: { usage: BotUsage[] }) {
                   dataKey="grounded"
                   name="Grounded"
                   stackId="answers"
-                  fill="#7c5aed"
+                  fill={chart.primary}
                   radius={[0, 0, 0, 0]}
                 />
                 <Bar
                   dataKey="ungrounded"
                   name="Unanswered"
                   stackId="answers"
-                  fill="#e5ddfb"
+                  fill={chart.claySoft}
                   radius={[4, 4, 0, 0]}
                 />
               </BarChart>

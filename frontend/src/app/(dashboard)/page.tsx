@@ -4,12 +4,17 @@ import { useState } from "react";
 import Link from "next/link";
 import {
   ArrowDownRight,
+  ArrowRight,
   ArrowUpRight,
+  BarChart3,
   Bot as BotIcon,
   Clock,
+  HeartPulse,
+  Inbox,
   MessagesSquare,
   Plus,
   ShieldCheck,
+  SlidersHorizontal,
   Sparkles,
 } from "lucide-react";
 import {
@@ -24,12 +29,16 @@ import {
 import { api, type Bot, type BotUsage, type Conversation } from "@/lib/api";
 import { useAsync } from "@/lib/hooks";
 import { useAuth } from "@/lib/auth";
+import { shortDay, utcDaysAgo, utcToday } from "@/lib/dates";
+import { chart, chartAxis, chartTooltip } from "@/lib/theme";
 import {
+  buttonLink,
   Card,
   CardHeader,
   Empty,
   ErrorNote,
   Loading,
+  PageHeader,
   ResolutionBadge,
   Select,
   cx,
@@ -42,12 +51,6 @@ const RANGES = [
   { days: 30, label: "Last 30 days" },
   { days: 90, label: "Last 90 days" },
 ] as const;
-
-function isoDaysAgo(days: number) {
-  const date = new Date();
-  date.setDate(date.getDate() - days);
-  return date.toISOString().slice(0, 10);
-}
 
 interface Overview {
   bots: Bot[];
@@ -68,11 +71,12 @@ interface Overview {
 async function loadOverview(days: number): Promise<Overview> {
   const bots = (await api.bots.list()).items;
 
-  const to = new Date().toISOString().slice(0, 10);
-  const from = isoDaysAgo(days - 1);
+  // UTC dates throughout: the backend buckets usage by UTC day.
+  const to = utcToday();
+  const from = utcDaysAgo(days - 1);
   // The window immediately before this one, same length.
-  const previousTo = isoDaysAgo(days);
-  const previousFrom = isoDaysAgo(days * 2 - 1);
+  const previousTo = utcDaysAgo(days);
+  const previousFrom = utcDaysAgo(days * 2 - 1);
 
   const [usages, previous, conversations] = await Promise.all([
     Promise.all(bots.map((bot) => api.usage.forBot(bot.id, from, to))),
@@ -112,23 +116,22 @@ export default function OverviewPage() {
 
   return (
     <>
-      <div className="mb-6 flex flex-wrap items-start justify-between gap-4">
-        <div>
-          <h1 className="text-2xl font-semibold tracking-tight">
-            {greeting()}, {firstName} 👋
-          </h1>
-          <p className="mt-1 text-sm text-muted">
-            Here&apos;s what&apos;s happening with your bots today.
-          </p>
-        </div>
-        <Link
-          href="/bots"
-          className="inline-flex items-center gap-2 rounded-lg bg-accent px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-accent-strong"
-        >
-          <Plus className="h-4 w-4" />
-          Create Bot
-        </Link>
-      </div>
+      <PageHeader
+        title={
+          <>
+            {greeting()}, <em className="font-medium text-clay">{firstName}</em>
+          </>
+        }
+        description="Here's what's happening with your assistants today."
+        action={
+          <Link href="/bots" className={buttonLink}>
+            <Plus className="h-4 w-4" />
+            Create bot
+          </Link>
+        }
+      />
+
+      <FeatureStrip />
 
       {loading ? (
         <Loading />
@@ -141,10 +144,7 @@ export default function OverviewPage() {
             title="No bots yet"
             description="Create a bot, give it a document to read, and it can start answering."
             action={
-              <Link
-                href="/bots"
-                className="inline-flex rounded-lg bg-accent px-4 py-2 text-sm font-medium text-white hover:bg-accent-strong"
-              >
+              <Link href="/bots" className={buttonLink}>
                 Create your first bot
               </Link>
             }
@@ -263,39 +263,35 @@ function Body({
                 <AreaChart data={series} margin={{ top: 4, right: 8, bottom: 0, left: -20 }}>
                   <defs>
                     <linearGradient id="overviewFill" x1="0" y1="0" x2="0" y2="1">
-                      <stop offset="0%" stopColor="#7c5aed" stopOpacity={0.3} />
-                      <stop offset="100%" stopColor="#7c5aed" stopOpacity={0} />
+                      <stop offset="0%" stopColor={chart.primary} stopOpacity={0.25} />
+                      <stop offset="100%" stopColor={chart.primary} stopOpacity={0} />
                     </linearGradient>
                   </defs>
-                  <CartesianGrid stroke="#e9e9f2" vertical={false} />
+                  <CartesianGrid stroke={chart.grid} vertical={false} />
                   <XAxis
                     dataKey="date"
-                    tick={{ fontSize: 11, fill: "#9a9ab0" }}
+                    tick={chartAxis}
                     tickLine={false}
                     axisLine={false}
-                    tickFormatter={(value: string) =>
-                      new Date(value).toLocaleDateString(undefined, {
-                        day: "numeric",
-                        month: "short",
-                      })
-                    }
+                    tickFormatter={shortDay}
                   />
                   <YAxis
-                    tick={{ fontSize: 11, fill: "#9a9ab0" }}
+                    tick={chartAxis}
                     tickLine={false}
                     axisLine={false}
                     allowDecimals={false}
                   />
                   <Tooltip
-                    contentStyle={{ borderRadius: 10, border: "1px solid #e9e9f2", fontSize: 12 }}
+                    contentStyle={chartTooltip}
+                    labelFormatter={(value) => shortDay(String(value))}
                   />
                   <Area
                     type="monotone"
                     dataKey="conversations"
-                    stroke="#7c5aed"
+                    stroke={chart.primary}
                     strokeWidth={2}
                     fill="url(#overviewFill)"
-                    dot={{ r: 2.5, fill: "#7c5aed" }}
+                    dot={{ r: 2.5, fill: chart.primary }}
                   />
                 </AreaChart>
               </ResponsiveContainer>
@@ -307,7 +303,7 @@ function Body({
           <CardHeader
             title="Top Bots"
             action={
-              <Link href="/bots" className="text-[13px] font-medium text-accent hover:underline">
+              <Link href="/bots" className="text-[13px] font-medium text-clay hover:underline">
                 View all
               </Link>
             }
@@ -328,7 +324,7 @@ function Body({
                         href={`/bots/${bot.id}`}
                         className="flex items-center gap-3 rounded-lg px-3 py-2.5 hover:bg-canvas"
                       >
-                        <span className="grid h-8 w-8 shrink-0 place-items-center rounded-lg bg-accent-soft text-accent">
+                        <span className="grid h-8 w-8 shrink-0 place-items-center rounded-xl bg-clay-soft text-clay">
                           <BotIcon className="h-4 w-4" />
                         </span>
                         <span className="min-w-0 flex-1 truncate text-sm">{bot.name}</span>
@@ -353,7 +349,7 @@ function Body({
             action={
               <Link
                 href="/conversations"
-                className="text-[13px] font-medium text-accent hover:underline"
+                className="text-[13px] font-medium text-clay hover:underline"
               >
                 View all
               </Link>
@@ -389,7 +385,7 @@ function Body({
           <CardHeader
             title="Bot Status"
             action={
-              <Link href="/bots" className="text-[13px] font-medium text-accent hover:underline">
+              <Link href="/bots" className="text-[13px] font-medium text-clay hover:underline">
                 View all
               </Link>
             }
@@ -429,6 +425,38 @@ function Body({
 
 // ------------------------------------------------------------------ pieces --
 
+const FEATURES = [
+  { href: "/health", label: "KB Health", body: "Find outdated or conflicting content", icon: HeartPulse, tint: "bg-sage-soft text-accent" },
+  { href: "/studio", label: "Widget Studio", body: "Style it, preview it, embed it", icon: SlidersHorizontal, tint: "bg-clay-soft text-clay" },
+  { href: "/inbox", label: "Handoff Inbox", body: "Escalations, owners, resolution", icon: Inbox, tint: "bg-warn-soft text-warn" },
+  { href: "/insights", label: "Insights", body: "Common and unanswered questions", icon: BarChart3, tint: "bg-sage-soft text-accent" },
+  { href: "/ask", label: "Ask Intelli", body: "Your AI setup guide", icon: Sparkles, tint: "bg-clay-soft text-clay" },
+];
+
+/** Shortcuts to the newer tools, so they are found without hunting the sidebar. */
+function FeatureStrip() {
+  return (
+    <div className="mb-5 grid grid-cols-2 gap-3 md:grid-cols-3 xl:grid-cols-5">
+      {FEATURES.map(({ href, label, body, icon: Icon, tint }) => (
+        <Link
+          key={href}
+          href={href}
+          className="group flex items-center gap-3 rounded-2xl border border-line bg-surface p-3 shadow-soft transition-transform hover:-translate-y-0.5"
+        >
+          <span className={cx("grid h-10 w-10 shrink-0 place-items-center rounded-xl", tint)}>
+            <Icon className="h-5 w-5" />
+          </span>
+          <span className="min-w-0 flex-1">
+            <span className="block text-[13.5px] font-semibold">{label}</span>
+            <span className="block truncate text-[12px] text-muted">{body}</span>
+          </span>
+          <ArrowRight className="h-3.5 w-3.5 shrink-0 text-faint transition-transform group-hover:translate-x-0.5" />
+        </Link>
+      ))}
+    </div>
+  );
+}
+
 function Tile({
   label,
   value,
@@ -450,11 +478,11 @@ function Tile({
     <Card className="p-5">
       <div className="flex items-center justify-between">
         <span className="text-[13px] text-muted">{label}</span>
-        <span className="grid h-7 w-7 place-items-center rounded-lg bg-accent-soft text-accent">
+        <span className="grid h-8 w-8 place-items-center rounded-xl bg-clay-soft text-clay">
           {icon}
         </span>
       </div>
-      <p className="mt-2 text-[28px] font-semibold leading-tight tracking-tight">{value}</p>
+      <p className="mt-2 font-display text-[30px] font-semibold leading-tight tracking-tight">{value}</p>
       <div className="mt-1 flex items-center gap-1.5">
         <Delta value={delta} unit={deltaUnit} lowerIsBetter={lowerIsBetter} />
         <span className="text-[12px] text-faint">vs last {days} days</span>

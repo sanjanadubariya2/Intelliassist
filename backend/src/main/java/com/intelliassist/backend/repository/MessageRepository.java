@@ -59,4 +59,27 @@ public interface MessageRepository extends JpaRepository<Message, UUID> {
             @Param("organizationId") UUID organizationId,
             @Param("from") Instant from,
             @Param("to") Instant to);
+
+    /**
+     * A bot's messages in a window, newest first, for conversation insights.
+     *
+     * <p>Bounded by the caller's {@link Pageable}: insights describe recent
+     * traffic, and an unbounded read here would grow with every message ever
+     * sent. The conversation is not fetched — only its id is read, which a lazy
+     * proxy answers without a query.
+     */
+    @Query("""
+            SELECT m FROM Message m
+            WHERE m.conversation.bot.id = :botId
+              AND m.conversation.bot.organization.id = :organizationId
+              AND m.createdAt >= :from
+              AND m.createdAt < :to
+            ORDER BY m.createdAt DESC
+            """)
+    List<Message> findRecentForBot(
+            @Param("botId") UUID botId,
+            @Param("organizationId") UUID organizationId,
+            @Param("from") Instant from,
+            @Param("to") Instant to,
+            Pageable pageable);
 }

@@ -56,7 +56,7 @@ export default function RegisterPage() {
 
   return (
     <>
-      <h1 className="text-lg font-semibold">Create your workspace</h1>
+      <h1 className="font-display text-[26px] font-semibold tracking-tight">Create your workspace</h1>
       <p className="mt-1 mb-5 text-[13px] text-muted">
         Your organization and your first account, in one step.
       </p>
@@ -114,7 +114,7 @@ export default function RegisterPage() {
 
       <p className="mt-5 text-center text-[13px] text-muted">
         Already have an account?{" "}
-        <Link href="/login" className="font-medium text-accent hover:underline">
+        <Link href="/login" className="font-medium text-clay hover:underline">
           Sign in
         </Link>
       </p>
