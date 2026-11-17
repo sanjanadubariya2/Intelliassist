@@ -168,7 +168,7 @@ migration you would want to rely on at three in the morning.
 | Variable | Default | Set it to | Why |
 | --- | --- | --- | --- |
 | `API_DOCS_ENABLED` | `true` | **`false`** | Swagger publishes every endpoint and DTO — a catalogue for anyone probing |
-| `CORS_ALLOWED_ORIGINS` | `http://localhost:3000` | your dashboard origin | Dashboard CORS is credentialed and must never be `*` |
+| `CORS_ALLOWED_ORIGINS` | `http://localhost:[*],http://127.0.0.1:[*]` | your exact dashboard origin | Dashboard CORS is credentialed and must never be `*` |
 | `INTELLIASSIST_APP__ENV` | `local` | `production` | Makes the API key mandatory instead of optional |
 | `INTELLIASSIST_APP__LOG_JSON` | `false` | `true` | Structured logs your aggregator can actually query |
 | `JWT_EXPIRATION` | `12h` | shorter, if you like | There is no refresh token; shorter means re-login |

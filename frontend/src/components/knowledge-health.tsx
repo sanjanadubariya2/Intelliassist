@@ -85,7 +85,7 @@ export function KnowledgeHealthView({ botId }: { botId: string }) {
       <div className="grid grid-cols-1 gap-4 xl:grid-cols-[minmax(0,1fr)_380px]">
         <Card>
           <CardHeader
-            title="Findings"
+            title="Issues to review"
             description="Ranked by how much each one can hurt an answer."
           />
           {data.issues.length === 0 ? (
@@ -140,51 +140,55 @@ function Summary({
         ? { label: "Needs attention", tone: "warn" as Tone, colour: "#d39b2a" }
         : { label: "At risk", tone: "bad" as Tone, colour: "#c2412d" };
 
-  return (
-    <Card className="p-5">
-      <div className="flex flex-wrap items-center gap-6">
-        <ScoreRing score={health.score} colour={grade.colour} />
+  const ofType = (...types: HealthIssueType[]) => health.issues.filter((issue) => types.includes(issue.type)).length;
+  const categories: Array<{ label: string; tone: Tone; count: number; note: string }> = [
+    { label: "Conflicting", tone: "bad", count: ofType("CONFLICTING_VERSIONS"), note: "Several live versions" },
+    { label: "Outdated", tone: "warn", count: ofType("OUTDATED"), note: "Not updated in a while" },
+    { label: "Duplicates", tone: "neutral", count: ofType("DUPLICATE"), note: "Same file twice" },
+    { label: "Gaps", tone: "clay", count: health.suggestedFaqs.length, note: "Asked, not answered" },
+  ];
 
+  return (
+    <div className="flex flex-wrap gap-4">
+      <Card className="flex min-w-0 flex-[1_1_320px] flex-wrap items-center gap-6 p-6">
+        <ScoreRing score={health.score} colour={grade.colour} />
         <div className="min-w-0 flex-1">
-          <div className="flex flex-wrap items-center gap-2">
-            <h2 className="font-display text-[22px] font-semibold">Knowledge base health</h2>
-            <Badge tone={grade.tone}>{grade.label}</Badge>
+          <p className="text-[12px] font-semibold uppercase tracking-[0.06em] text-muted">Health score</p>
+          <div className="mt-1.5 flex flex-wrap items-center gap-2">
+            <p className="font-display text-[22px] font-semibold">{grade.label}</p>
           </div>
-          <p className="mt-1 text-[13px] text-muted">
+          <p className="mt-1.5 text-[14px] leading-normal text-muted">
             {health.issues.length === 0
               ? "Everything your bot answers from looks current and consistent."
-              : `${health.issues.length} finding${health.issues.length === 1 ? "" : "s"}: ${counts.HIGH} high, ${counts.MEDIUM} medium, ${counts.LOW} low.`}
+              : `${health.issues.length} finding${health.issues.length === 1 ? "" : "s"}: ${counts.HIGH} high, ${counts.MEDIUM} medium, ${counts.LOW} low.`}{" "}
+            {formatNumber(health.indexedCount)} of {formatNumber(health.documentCount)} documents ready,{" "}
+            {formatNumber(health.totalChunks)} passages.
           </p>
-
-          <dl className="mt-4 grid grid-cols-3 gap-3 sm:max-w-md">
-            <Metric label="Documents" value={formatNumber(health.documentCount)} />
-            <Metric label="Ready" value={formatNumber(health.indexedCount)} />
-            <Metric label="Chunks" value={formatNumber(health.totalChunks)} />
-          </dl>
+          <div className="mt-4 flex flex-wrap gap-2">
+            <Button size="sm" onClick={onRefresh} loading={refreshing}>
+              {!refreshing && <RefreshCw className="h-3.5 w-3.5" />}
+              Scan again
+            </Button>
+            <Link
+              href={`/bots/${botId}?tab=knowledge`}
+              className="inline-flex min-h-9 items-center rounded-xl border border-[#e2d4c5] bg-surface px-3 text-[13px] font-semibold hover:bg-cream"
+            >
+              Manage documents
+            </Link>
+          </div>
         </div>
-
-        <div className="flex gap-2">
-          <Link
-            href={`/bots/${botId}`}
-            className="inline-flex items-center gap-2 rounded-xl border border-line bg-surface px-3 py-1.5 text-[13px] font-medium hover:border-clay/40"
-          >
-            Manage documents
-          </Link>
-          <Button size="sm" variant="secondary" onClick={onRefresh} loading={refreshing}>
-            {!refreshing && <RefreshCw className="h-3.5 w-3.5" />}
-            Re-check
-          </Button>
-        </div>
+      </Card>
+      <div className="grid min-w-0 flex-[2_1_480px] grid-cols-[repeat(auto-fit,minmax(160px,1fr))] gap-4">
+        {categories.map((category) => (
+          <Card key={category.label} className="flex flex-col gap-1.5 p-5">
+            <span className="self-start">
+              <Badge tone={category.tone}>{category.label}</Badge>
+            </span>
+            <span className="font-display text-[32px] font-semibold leading-tight">{category.count}</span>
+            <span className="text-[13px] text-muted">{category.note}</span>
+          </Card>
+        ))}
       </div>
-    </Card>
-  );
-}
-
-function Metric({ label, value }: { label: string; value: string }) {
-  return (
-    <div className="rounded-xl bg-cream px-3 py-2 ring-1 ring-line">
-      <dt className="text-[11.5px] text-muted">{label}</dt>
-      <dd className="font-display text-lg font-semibold">{value}</dd>
     </div>
   );
 }
@@ -196,23 +200,23 @@ function ScoreRing({ score, colour }: { score: number; colour: string }) {
   const filled = (Math.max(0, Math.min(100, score)) / 100) * circumference;
 
   return (
-    <div className="relative h-24 w-24 shrink-0" role="img" aria-label={`Health score ${score} out of 100`}>
-      <svg viewBox="0 0 96 96" className="h-24 w-24 -rotate-90">
-        <circle cx="48" cy="48" r={radius} fill="none" stroke="#eee2d5" strokeWidth="9" />
+    <div className="relative h-[120px] w-[120px] shrink-0" role="img" aria-label={`Health score ${score} out of 100`}>
+      <svg viewBox="0 0 96 96" className="h-[120px] w-[120px] -rotate-90">
+        <circle cx="48" cy="48" r={radius} fill="none" stroke="#f3ece4" strokeWidth="10" />
         <circle
           cx="48"
           cy="48"
           r={radius}
           fill="none"
           stroke={colour}
-          strokeWidth="9"
+          strokeWidth="10"
           strokeLinecap="round"
           strokeDasharray={`${filled} ${circumference}`}
         />
       </svg>
       <span className="absolute inset-0 grid place-items-center">
         <span className="text-center">
-          <span className="block font-display text-[26px] font-semibold leading-none">{score}</span>
+          <span className="block font-display text-[32px] font-semibold leading-none">{score}</span>
           <span className="text-[10.5px] text-muted">/ 100</span>
         </span>
       </span>
@@ -231,7 +235,7 @@ function IssueRow({ issue, onChanged }: { issue: HealthIssue; onChanged: () => v
   const keepFirst = issue.type === "DUPLICATE" || issue.type === "CONFLICTING_VERSIONS";
 
   return (
-    <li className="flex gap-3 px-5 py-4">
+    <li className="flex gap-4 px-6 py-5">
       <span
         className={cx(
           "grid h-9 w-9 shrink-0 place-items-center rounded-xl",
@@ -247,10 +251,10 @@ function IssueRow({ issue, onChanged }: { issue: HealthIssue; onChanged: () => v
 
       <div className="min-w-0 flex-1">
         <div className="flex flex-wrap items-center gap-2">
-          <p className="text-sm font-medium">{issue.title}</p>
+          <p className="text-[15px] font-semibold">{issue.title}</p>
           <Badge tone={severity.tone}>{severity.label}</Badge>
         </div>
-        <p className="mt-0.5 text-[13px] text-muted">{issue.detail}</p>
+        <p className="mt-1 text-[14px] leading-normal text-[#4a3d35]">{issue.detail}</p>
 
         {issue.filenames.length > 0 && (
           <ul className="mt-2 flex flex-wrap gap-1.5">

@@ -124,6 +124,26 @@ export function BotKnowledge({ botId }: { botId: string }) {
           </div>
         )}
 
+        {/* The whole card accepts drops; this is the visible target for it. */}
+        <div className="px-5 pt-5">
+          <button
+            type="button"
+            onClick={() => fileInput.current?.click()}
+            className={cx(
+              "flex w-full flex-col items-center justify-center gap-2 rounded-2xl border-2 border-dashed px-6 py-8 text-center transition-colors",
+              dragging ? "border-clay bg-clay-soft/50" : "border-[#d9c6b3] bg-cream hover:border-clay/50",
+            )}
+          >
+            <span className="grid h-12 w-12 place-items-center rounded-full bg-accent-soft text-accent">
+              <Upload className="h-5 w-5" />
+            </span>
+            <span className="text-[16px] font-semibold">
+              {uploading ? "Uploading…" : "Drop files here or browse"}
+            </span>
+            <span className="text-[13px] text-muted">PDF, DOCX, TXT or Markdown</span>
+          </button>
+        </div>
+
         {loading ? (
           <Loading />
         ) : error ? (

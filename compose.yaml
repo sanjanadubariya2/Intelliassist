@@ -123,7 +123,17 @@ services:
       # Required. Generate with: openssl rand -base64 48
       JWT_SECRET: "${JWT_SECRET:-}"
       SPRING_PROFILES_ACTIVE: ${SPRING_PROFILES_ACTIVE:-dev}
-      CORS_ALLOWED_ORIGINS: ${CORS_ALLOWED_ORIGINS:-http://localhost:3000}
+      # Any local port: the dashboard moves to 3001+ when 3000 is busy.
+      CORS_ALLOWED_ORIGINS: ${CORS_ALLOWED_ORIGINS:-http://localhost:[*],http://127.0.0.1:[*]}
+      # Single sign-on. Optional: a provider without both values stays off.
+      OAUTH_FRONTEND_URL: ${OAUTH_FRONTEND_URL:-http://localhost:3000}
+      OAUTH_PUBLIC_URL: ${OAUTH_PUBLIC_URL:-http://localhost:8080}
+      GOOGLE_CLIENT_ID: "${GOOGLE_CLIENT_ID:-}"
+      GOOGLE_CLIENT_SECRET: "${GOOGLE_CLIENT_SECRET:-}"
+      GITHUB_CLIENT_ID: "${GITHUB_CLIENT_ID:-}"
+      GITHUB_CLIENT_SECRET: "${GITHUB_CLIENT_SECRET:-}"
+      LINKEDIN_CLIENT_ID: "${LINKEDIN_CLIENT_ID:-}"
+      LINKEDIN_CLIENT_SECRET: "${LINKEDIN_CLIENT_SECRET:-}"
     ports:
       - "8080:8080"
     depends_on:

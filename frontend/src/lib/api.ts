@@ -46,6 +46,41 @@ export interface AuthResponse {
   role: MemberRole;
 }
 
+/** Mirrors OAuthController.ProviderSummary. */
+export type SsoProviderId = "google" | "github" | "linkedin";
+
+export interface SsoProvider {
+  id: SsoProviderId;
+  name: string;
+  /** False when the deployment has no client id and secret for it. */
+  enabled: boolean;
+}
+
+/**
+ * Where a provider button sends the browser. A full navigation, not a fetch:
+ * the backend answers with a redirect to the provider's own sign-in page.
+ */
+export function ssoStartUrl(provider: SsoProviderId, returnTo?: string) {
+  // Tells the backend where to come back to: this dashboard, on whatever port
+  // it happens to be running. The backend accepts it only if it is an allowed
+  // origin, and otherwise falls back to OAUTH_FRONTEND_URL.
+  const query = returnTo ? `?return_to=${encodeURIComponent(returnTo)}` : "";
+  return `${BASE_URL}/api/v1/auth/oauth/${provider}/start${query}`;
+}
+
+/** What each `sso_error` code from the backend means, in words. */
+export const SSO_ERRORS: Record<string, string> = {
+  access_denied: "Sign-in was cancelled.",
+  provider_not_configured: "That sign-in option isn't set up on this server yet.",
+  unknown_provider: "That sign-in option doesn't exist.",
+  invalid_state: "The sign-in link expired or was opened in another browser. Please try again.",
+  no_verified_email: "The provider didn't share a verified email address, so we can't sign you in with it.",
+  account_exists:
+    "An account with this email already exists. Sign in with your email and password instead.",
+  no_organization: "Your account isn't part of any workspace.",
+  provider_error: "We couldn't reach the sign-in provider. Please try again.",
+};
+
 export interface UserSummary {
   id: string;
   name: string;
@@ -436,6 +471,43 @@ interface RequestOptions {
   signal?: AbortSignal;
 }
 
+/**
+ * Explains a request that never got a response.
+ *
+ * fetch rejects without saying why: connection refused, DNS failure and a CORS
+ * rejection all look identical. The old message always blamed a stopped
+ * backend, which was wrong in the commonest local case: the dashboard on port
+ * 3001 (Next.js moves there when 3000 is busy), refused by the API's CORS
+ * policy while the API was perfectly healthy.
+ *
+ * So ask once more in `no-cors` mode, which CORS cannot block. If that
+ * resolves, the server is up and the browser refused to share its answer with
+ * this page: an origin problem, named as such, with the origin to allow.
+ */
+async function unreachable(): Promise<ApiError> {
+  let serverUp = false;
+  try {
+    await fetch(`${BASE_URL}/api/v1/health`, { mode: "no-cors", cache: "no-store" });
+    serverUp = true;
+  } catch {
+    serverUp = false;
+  }
+
+  if (serverUp && typeof window !== "undefined") {
+    return new ApiError(
+      0,
+      `The API at ${BASE_URL} is running but refused requests from ${window.location.origin}. ` +
+        `Add ${window.location.origin} to CORS_ALLOWED_ORIGINS in .env and restart the backend ` +
+        "(docker compose --profile app up -d backend).",
+    );
+  }
+  return new ApiError(
+    0,
+    `Cannot reach the API at ${BASE_URL}. Is the backend running? ` +
+      "Start it with: docker compose --profile app up -d",
+  );
+}
+
 async function request<T>(path: string, options: RequestOptions = {}): Promise<T> {
   const token = tokenStore.get();
   const headers: Record<string, string> = {};
@@ -452,17 +524,8 @@ async function request<T>(path: string, options: RequestOptions = {}): Promise<T
       signal: options.signal,
     });
   } catch (cause) {
-    // fetch rejects rather than resolving when the request never reached the
-    // server: connection refused, DNS failure, CORS. The browser deliberately
-    // withholds which, so the message names the likeliest cause instead of
-    // blaming whatever the caller happened to be doing -- "could not create
-    // the account" sends someone hunting through a form that was fine.
     if (cause instanceof DOMException && cause.name === "AbortError") throw cause;
-    throw new ApiError(
-      0,
-      `Cannot reach the API at ${BASE_URL}. Is the backend running? ` +
-        "Start it with: docker compose --profile app up -d",
-    );
+    throw await unreachable();
   }
 
   if (!response.ok) {
@@ -500,6 +563,9 @@ export const api = {
       request<AuthResponse>("/auth/login", { body }),
 
     me: () => request<CurrentUser>("/auth/me"),
+
+    /** Which single sign-on providers this deployment has configured. */
+    providers: () => request<{ providers: SsoProvider[] }>("/auth/oauth/providers"),
   },
 
   bots: {
@@ -695,9 +761,9 @@ export async function streamMessage(
   },
   signal?: AbortSignal,
 ): Promise<void> {
-  const response = await fetch(
-    `${BASE_URL}/api/v1/conversations/${conversationId}/messages/stream`,
-    {
+  let response: Response;
+  try {
+    response = await fetch(`${BASE_URL}/api/v1/conversations/${conversationId}/messages/stream`, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
@@ -705,8 +771,12 @@ export async function streamMessage(
       },
       body: JSON.stringify({ content }),
       signal,
-    },
-  );
+    });
+  } catch (cause) {
+    // Without this the chat showed the browser's bare "Failed to fetch".
+    if (cause instanceof DOMException && cause.name === "AbortError") throw cause;
+    throw await unreachable();
+  }
 
   if (!response.ok) throw await toError(response);
   if (!response.body) throw new ApiError(500, "The server sent no response body");

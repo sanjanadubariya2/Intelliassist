@@ -177,11 +177,6 @@ export default function AskPage() {
       <PageHeader
         title="Ask Intelli"
         description="Your AI setup guide. Get help, have features explained, and make changes with your approval."
-        eyebrow={
-          <>
-            <Sparkles className="h-3.5 w-3.5" /> New
-          </>
-        }
         action={
           setup.data && setup.data.bots.length > 1 ? (
             <Select
@@ -207,11 +202,20 @@ export default function AskPage() {
       ) : (
         <div className="grid grid-cols-1 gap-4 xl:grid-cols-[minmax(0,1fr)_340px]">
           <Card className="flex h-[calc(100dvh-210px)] min-h-[520px] flex-col overflow-hidden">
-            <div ref={scroller} className="flex-1 space-y-4 overflow-y-auto bg-cream/60 p-5">
+            <div className="flex items-center gap-3 border-b border-line px-6 py-4">
+              <span className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-clay-soft text-clay-strong">
+                <Sparkles className="h-[18px] w-[18px]" />
+              </span>
+              <div className="min-w-0">
+                <h2 className="font-display text-[20px] font-semibold leading-tight">Intelli</h2>
+                <p className="text-[13px] text-muted">Questions about your workspace, setup and changes.</p>
+              </div>
+            </div>
+            <div ref={scroller} className="flex-1 space-y-5 overflow-y-auto p-6">
               {entries.map((entry) =>
                 entry.role === "user" ? (
                   <div key={entry.id} className="flex items-end justify-end gap-2">
-                    <p className="max-w-[78%] rounded-2xl rounded-br-md bg-clay-soft px-4 py-2.5 text-sm">
+                    <p className="max-w-[78%] rounded-2xl rounded-br-[4px] bg-accent px-4 py-3 text-[15px] leading-normal text-white">
                       {entry.text}
                     </p>
                     <Avatar name={user?.user.name ?? "You"} />
@@ -229,45 +233,50 @@ export default function AskPage() {
               )}
             </div>
 
-            <div className="border-t border-line bg-surface p-3">
-              {entries.length <= 2 && (
-                <div className="mb-2 flex flex-wrap gap-1.5">
-                  {STARTERS.map((starter) => (
-                    <button
-                      key={starter}
-                      onClick={() => ask(starter)}
-                      className="shrink-0 rounded-full border border-line bg-cream px-3 py-1 text-[12px] text-muted transition-colors hover:border-clay/40 hover:text-ink"
-                    >
-                      {starter}
-                    </button>
-                  ))}
-                </div>
-              )}
+            <div className="border-t border-line bg-surface px-6 pb-5 pt-4">
               <form
                 onSubmit={(event) => {
                   event.preventDefault();
                   ask(input);
                 }}
-                className="flex items-center gap-2 rounded-full border border-line bg-cream py-1.5 pl-4 pr-1.5 focus-within:border-clay/50 focus-within:ring-2 focus-within:ring-clay/15"
+                className="flex items-center gap-2.5 rounded-2xl border border-[#e2d4c5] bg-cream py-2 pl-4 pr-2 focus-within:border-clay/50 focus-within:ring-2 focus-within:ring-clay/15"
               >
-                <Sparkles className="h-4 w-4 shrink-0 text-clay" />
                 <input
                   ref={inputRef}
                   value={input}
                   onChange={(event) => setInput(event.target.value)}
-                  placeholder="Ask Intelli, or tell it what to change…"
+                  placeholder="Ask about your bots, conversations or knowledge base"
                   aria-label="Message Intelli"
-                  className="min-w-0 flex-1 bg-transparent text-sm placeholder:text-faint focus:outline-none"
+                  className="min-h-10 min-w-0 flex-1 bg-transparent text-[15px] placeholder:text-muted focus:outline-none"
                 />
                 <button
                   type="submit"
                   disabled={!input.trim()}
                   aria-label="Send"
-                  className="grid h-9 w-9 shrink-0 place-items-center rounded-full bg-accent text-white transition-colors hover:bg-accent-strong disabled:opacity-40"
+                  className="grid h-11 w-11 shrink-0 place-items-center rounded-xl bg-accent text-white transition-colors hover:bg-accent-strong disabled:opacity-40"
                 >
                   <Send className="h-4 w-4" />
                 </button>
               </form>
+              <p className="mt-2 text-[12px] text-muted">
+                Intelli reads your workspace. It never messages customers, and every change waits for your approval.
+              </p>
+            </div>
+          </Card>
+
+          <aside className="flex flex-col gap-4">
+          <Card className="p-5">
+            <h2 className="mb-3 text-[12px] font-semibold uppercase tracking-[0.06em] text-muted">Try asking</h2>
+            <div className="flex flex-col gap-2">
+              {STARTERS.map((starter) => (
+                <button
+                  key={starter}
+                  onClick={() => ask(starter)}
+                  className="min-h-11 rounded-xl border border-line bg-cream px-3.5 py-2.5 text-left text-[14px] font-medium leading-snug transition-colors hover:border-clay/40"
+                >
+                  {starter}
+                </button>
+              ))}
             </div>
           </Card>
 
@@ -315,6 +324,7 @@ export default function AskPage() {
               your approval.
             </p>
           </Card>
+          </aside>
         </div>
       )}
     </>
@@ -338,11 +348,11 @@ function IntelliMessage({
 
   return (
     <div className="animate-rise flex items-start gap-2.5">
-      <span className="grid h-9 w-9 shrink-0 place-items-center rounded-full bg-gradient-to-br from-clay to-[#e0896d] text-white shadow-soft">
-        <Sparkles className="h-4.5 w-4.5" />
+      <span className="grid h-8 w-8 shrink-0 place-items-center rounded-[10px] bg-clay-soft text-clay-strong">
+        <Sparkles className="h-4 w-4" />
       </span>
-      <div className="min-w-0 max-w-[88%] space-y-2">
-        <div className="rounded-2xl rounded-tl-md border border-line bg-surface px-4 py-3 text-sm shadow-soft">
+      <div className="min-w-0 max-w-[88%] space-y-2.5">
+        <div className="rounded-2xl rounded-bl-[4px] border border-line bg-cream px-4 py-3 text-[15px] leading-relaxed">
           <p>{renderBold(reply.text)}</p>
           {reply.bullets && reply.bullets.length > 0 && (
             <ul className="mt-2 space-y-1">
@@ -386,7 +396,7 @@ function IntelliMessage({
               <button
                 key={suggestion}
                 onClick={() => onAsk(suggestion)}
-                className="rounded-full border border-line bg-surface px-3 py-1 text-[12px] text-muted transition-colors hover:border-clay/40 hover:text-ink"
+                className="min-h-9 rounded-full border border-[#e2d4c5] bg-surface px-3.5 text-[13px] font-medium transition-colors hover:border-clay/40 hover:bg-cream"
               >
                 {suggestion}
               </button>

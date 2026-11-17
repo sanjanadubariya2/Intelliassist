@@ -2,12 +2,13 @@
 
 import { useState } from "react";
 import Link from "next/link";
-import { BookOpen, FileText, HeartPulse } from "lucide-react";
+import { BookOpen, FileText, HeartPulse, Upload } from "lucide-react";
 import { api, isIndexing, type Bot, type Document } from "@/lib/api";
 import { DocumentStatusBadge } from "@/components/document-status";
 import { useAsync, usePolling } from "@/lib/hooks";
 import {
   Badge,
+  buttonLink,
   Card,
   CardHeader,
   Empty,
@@ -16,6 +17,7 @@ import {
   PageHeader,
   Select,
   formatBytes,
+  formatNumber,
   formatRelative,
   cx,
 } from "@/components/ui";
@@ -78,15 +80,33 @@ export default function KnowledgePage() {
     <>
       <PageHeader
         title="Knowledge Base"
-        description="Everything your bots are allowed to answer from."
+        description={
+          data
+            ? `Everything your bots are allowed to answer from. ${formatNumber(data.documents.length)} document${
+                data.documents.length === 1 ? "" : "s"
+              }, ${formatNumber(data.documents.reduce((total, d) => total + (d.chunkCount ?? 0), 0))} passages.`
+            : "Everything your bots are allowed to answer from."
+        }
         action={
-          <Link
-            href="/health"
-            className="inline-flex items-center gap-2 rounded-xl border border-line bg-surface px-4 py-2 text-sm font-medium hover:border-clay/40"
-          >
-            <HeartPulse className="h-4 w-4 text-clay" />
-            Check health
-          </Link>
+          <div className="flex flex-wrap gap-2.5">
+            <Link
+              href="/health"
+              className="inline-flex min-h-11 items-center gap-2 rounded-xl border border-[#e2d4c5] bg-surface px-4 text-sm font-semibold hover:bg-cream"
+            >
+              <HeartPulse className="h-4 w-4 text-clay" />
+              Check health
+            </Link>
+            {data && data.bots.length > 0 && (
+              <Link
+                // Uploads belong to a bot; with a filter picked, go straight to it.
+                href={`/bots/${botFilter !== "all" ? botFilter : data.bots[0].id}?tab=knowledge`}
+                className={buttonLink}
+              >
+                <Upload className="h-4 w-4" />
+                Upload documents
+              </Link>
+            )}
+          </div>
         }
       />
 
@@ -96,10 +116,10 @@ export default function KnowledgePage() {
             key={entry.id}
             onClick={() => setTab(entry.id)}
             className={cx(
-              "-mb-px flex items-center gap-1.5 whitespace-nowrap border-b-2 px-3.5 py-2.5 text-sm transition-colors",
+              "-mb-px flex min-h-11 items-center gap-1.5 whitespace-nowrap border-b-2 px-4 text-[14px] transition-colors",
               tab === entry.id
-                ? "border-clay font-medium text-ink"
-                : "border-transparent text-muted hover:text-ink",
+                ? "border-clay font-semibold text-clay-strong"
+                : "border-transparent font-medium text-[#5f5249] hover:text-ink",
             )}
           >
             {entry.label}
@@ -147,22 +167,25 @@ export default function KnowledgePage() {
           />
         ) : (
           <div className="overflow-x-auto">
-            <table className="w-full text-sm">
+            <table className="w-full text-[14px]">
               <thead>
-                <tr className="border-b border-line text-left text-[12px] text-muted">
-                  <th className="px-5 py-3 font-medium">File</th>
-                  <th className="px-5 py-3 font-medium">Bot</th>
-                  <th className="px-5 py-3 font-medium">Status</th>
-                  <th className="px-5 py-3 font-medium">Chunks</th>
-                  <th className="px-5 py-3 font-medium">Uploaded</th>
+                <tr className="border-b border-line text-left text-[12px] font-semibold text-muted">
+                  <th className="px-5 py-3">Source</th>
+                  <th className="px-5 py-3">Type</th>
+                  <th className="px-5 py-3">Bot</th>
+                  <th className="px-5 py-3">Passages</th>
+                  <th className="px-5 py-3">Uploaded</th>
+                  <th className="px-5 py-3">Status</th>
                 </tr>
               </thead>
               <tbody>
                 {documents.map((document) => (
-                  <tr key={document.id} className="border-b border-line last:border-0">
+                  <tr key={document.id} className="border-b border-[#f3ece4] last:border-0 hover:bg-cream/60">
                     <td className="px-5 py-3.5">
                       <div className="flex items-center gap-2.5">
-                        <FileText className="h-4 w-4 shrink-0 text-faint" />
+                        <span className="grid h-8 w-8 shrink-0 place-items-center rounded-lg bg-clay-soft text-clay">
+                          <FileText className="h-4 w-4" />
+                        </span>
                         <div className="min-w-0">
                           <p className="truncate font-medium">{document.filename}</p>
                           <p className="text-[12px] text-muted">
@@ -173,12 +196,19 @@ export default function KnowledgePage() {
                       </div>
                     </td>
                     <td className="px-5 py-3.5">
+                      <Badge>{fileType(document.filename)}</Badge>
+                    </td>
+                    <td className="whitespace-nowrap px-5 py-3.5">
                       <Link
-                        href={`/bots/${document.botId}`}
+                        href={`/bots/${document.botId}?tab=knowledge`}
                         className="text-muted hover:text-clay"
                       >
                         {document.botName}
                       </Link>
+                    </td>
+                    <td className="px-5 py-3.5">{document.chunkCount ?? "—"}</td>
+                    <td className="whitespace-nowrap px-5 py-3.5 text-muted">
+                      {formatRelative(document.createdAt)}
                     </td>
                     <td className="px-5 py-3.5">
                       <DocumentStatusBadge status={document.status} />
@@ -187,10 +217,6 @@ export default function KnowledgePage() {
                           {document.errorMessage}
                         </p>
                       )}
-                    </td>
-                    <td className="px-5 py-3.5 text-muted">{document.chunkCount ?? "—"}</td>
-                    <td className="px-5 py-3.5 text-muted">
-                      {formatRelative(document.createdAt)}
                     </td>
                   </tr>
                 ))}
@@ -202,6 +228,12 @@ export default function KnowledgePage() {
       )}
     </>
   );
+}
+
+/** "PDF", "DOCX", "MD" from the file name. */
+function fileType(filename: string) {
+  const dot = filename.lastIndexOf(".");
+  return dot > 0 ? filename.slice(dot + 1).toUpperCase() : "FILE";
 }
 
 /**

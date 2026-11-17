@@ -111,7 +111,7 @@ export function WidgetStudio({
     setDraft((current) => ({ ...current, [key]: value }));
 
   return (
-    <div className="grid grid-cols-1 gap-4 xl:grid-cols-[minmax(0,1fr)_400px]">
+    <div className="grid grid-cols-1 gap-5 xl:grid-cols-[minmax(0,1fr)_minmax(0,1.25fr)]">
       <div className="min-w-0">
         <Tabs tabs={TABS} value={tab} onChange={setTab} />
 
@@ -305,7 +305,7 @@ function Preview({ draft, name }: { draft: Draft; name: string }) {
       type="button"
       onClick={() => setOpen((value) => !value)}
       aria-label={open ? "Close preview chat" : "Open preview chat"}
-      className="grid h-12 w-12 shrink-0 place-items-center rounded-full text-white shadow-lift transition-transform hover:scale-105"
+      className="grid h-14 w-14 shrink-0 place-items-center rounded-full text-white shadow-lift transition-transform hover:scale-105"
       style={{ background: colour }}
     >
       {open ? <X className="h-5 w-5" /> : icon}
@@ -313,12 +313,20 @@ function Preview({ draft, name }: { draft: Draft; name: string }) {
   );
 
   return (
-    <Card className="overflow-hidden">
-      <div className="flex items-center justify-between border-b border-line px-4 py-3">
-        <p className="flex items-center gap-2 text-[13px] font-medium">
+    <section aria-label="Live preview" className="overflow-hidden rounded-[20px] border border-line bg-[#f4ece2]">
+      <div className="flex items-center gap-2 border-b border-line px-5 py-3.5">
+        <span className="flex gap-1.5" aria-hidden>
+          <span className="h-2.5 w-2.5 rounded-full bg-[#e2d4c5]" />
+          <span className="h-2.5 w-2.5 rounded-full bg-[#e2d4c5]" />
+          <span className="h-2.5 w-2.5 rounded-full bg-[#e2d4c5]" />
+        </span>
+        <span className="ml-2 rounded-full bg-[#f3ece4] px-2.5 py-0.5 text-[12px] font-semibold text-[#5f5249] ring-1 ring-line">
+          your-website.com
+        </span>
+        <span className="ml-auto flex items-center gap-2 text-[13px] font-medium">
           <span className="h-2 w-2 rounded-full bg-ok" /> Live preview
-        </p>
-        <div className="flex rounded-lg bg-cream p-0.5 ring-1 ring-line">
+        </span>
+        <div className="flex rounded-lg bg-surface p-0.5 ring-1 ring-line">
           {(["desktop", "phone"] as const).map((option) => (
             <button
               key={option}
@@ -327,8 +335,8 @@ function Preview({ draft, name }: { draft: Draft; name: string }) {
               aria-label={`${option} preview`}
               aria-pressed={device === option}
               className={cx(
-                "rounded-md px-2 py-1 transition-colors",
-                device === option ? "bg-surface text-ink shadow-sm" : "text-faint hover:text-ink",
+                "grid h-8 w-8 place-items-center rounded-md transition-colors",
+                device === option ? "bg-cream text-ink shadow-sm" : "text-muted hover:text-ink",
               )}
             >
               {option === "desktop" ? <Laptop className="h-3.5 w-3.5" /> : <Smartphone className="h-3.5 w-3.5" />}
@@ -337,55 +345,58 @@ function Preview({ draft, name }: { draft: Draft; name: string }) {
         </div>
       </div>
 
-      <div className="bg-[linear-gradient(135deg,#fbf6f0,#f3ebe1)] p-4">
+      <div className="p-5">
         <div
           className={cx(
-            "relative mx-auto flex flex-col gap-3 overflow-hidden rounded-xl bg-surface/70 p-3 ring-1 ring-line transition-all",
-            device === "phone" ? "h-[480px] w-[250px] rounded-[28px]" : "h-[480px] w-full",
+            "relative mx-auto flex flex-col gap-3.5 overflow-hidden p-5 transition-all",
+            device === "phone"
+              ? "h-[600px] w-[300px] rounded-[32px] bg-surface/60 ring-1 ring-line"
+              : "h-[600px] w-full rounded-xl",
             bottom ? "justify-end" : "justify-start",
             right ? "items-end" : "items-start",
           )}
         >
           {/* A sketch of the host page, so the widget is seen in context. */}
-          <div className="pointer-events-none absolute inset-x-4 top-4 space-y-2 opacity-60" aria-hidden>
-            <div className="h-3 w-1/3 rounded bg-line" />
-            <div className="h-2 w-3/4 rounded bg-line/70" />
-            <div className="h-2 w-2/3 rounded bg-line/70" />
+          <div className="pointer-events-none absolute inset-x-5 top-5 max-w-[420px] space-y-3 opacity-60" aria-hidden>
+            <div className="h-5 w-3/5 rounded-md bg-[#e2d4c5]" />
+            <div className="h-3 w-[90%] rounded-md bg-[#ebe0d3]" />
+            <div className="h-3 w-4/5 rounded-md bg-[#ebe0d3]" />
+            <div className="mt-2 h-40 rounded-xl bg-[#ebe0d3]" />
           </div>
 
           {!bottom && launcher}
 
           {open && (
-            <div className="animate-rise relative w-full max-w-[280px] overflow-hidden rounded-2xl bg-surface shadow-lift ring-1 ring-line">
-              <div className="flex items-center gap-2 px-3 py-2.5 text-white" style={{ background: colour }}>
-                <span className="grid h-6 w-6 place-items-center rounded-full bg-white/20 text-[11px] font-semibold">
+            <div className="animate-rise relative w-full max-w-[340px] overflow-hidden rounded-[18px] bg-surface shadow-lift">
+              <div className="flex items-center gap-2.5 px-4 py-3.5 text-white" style={{ background: colour }}>
+                <span className="grid h-[34px] w-[34px] place-items-center rounded-[10px] bg-white/20 text-[14px] font-semibold">
                   {name.slice(0, 1).toUpperCase()}
                 </span>
                 <span className="min-w-0 flex-1">
-                  <span className="block truncate text-[13px] font-semibold">{name}</span>
-                  <span className="block text-[10.5px] opacity-80">Typically replies instantly</span>
+                  <span className="block truncate text-[15px] font-semibold">{name}</span>
+                  <span className="block text-[12px] opacity-90">Usually replies instantly</span>
                 </span>
               </div>
 
-              <div className="space-y-2 bg-cream p-3">
-                <p className="max-w-[88%] rounded-2xl rounded-tl-sm bg-surface px-3 py-2 text-[12px] shadow-sm ring-1 ring-line">
+              <div className="space-y-2.5 bg-[#fffdfa] p-4">
+                <p className="max-w-[88%] rounded-[14px] rounded-bl-[4px] bg-[#f6f0e9] px-3 py-2.5 text-[13px] leading-normal">
                   {draft.welcomeMessage || "…"}
                 </p>
                 <p
-                  className="ml-auto max-w-[85%] rounded-2xl rounded-tr-sm px-3 py-2 text-[12px] text-white"
+                  className="ml-auto max-w-[85%] rounded-[14px] rounded-br-[4px] px-3 py-2.5 text-[13px] leading-normal text-white"
                   style={{ background: colour }}
                 >
                   {showFallback ? "Do you sell gift cards?" : "Do you deliver across India?"}
                 </p>
-                <p className="max-w-[88%] rounded-2xl rounded-tl-sm bg-surface px-3 py-2 text-[12px] shadow-sm ring-1 ring-line">
+                <p className="max-w-[88%] rounded-[14px] rounded-bl-[4px] bg-[#f6f0e9] px-3 py-2.5 text-[13px] leading-normal">
                   {showFallback
                     ? draft.fallbackMessage || "…"
                     : "Yes! We deliver across India within 3–7 business days."}
                 </p>
               </div>
 
-              <div className="flex items-center gap-2 border-t border-line px-3 py-2">
-                <span className="flex-1 text-[12px] text-faint">Type your message…</span>
+              <div className="flex items-center gap-2 border-t border-line px-4 py-3">
+                <span className="flex-1 text-[13px] text-muted">Type your question…</span>
                 <Send className="h-3.5 w-3.5" style={{ color: colour }} />
               </div>
             </div>
@@ -404,6 +415,6 @@ function Preview({ draft, name }: { draft: Draft; name: string }) {
           Preview the fallback reply
         </label>
       </div>
-    </Card>
+    </section>
   );
 }

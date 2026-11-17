@@ -6,6 +6,7 @@ import { useRouter } from "next/navigation";
 import { useAuth } from "@/lib/auth";
 import { ApiError } from "@/lib/api";
 import { Button, Field, Input } from "@/components/ui";
+import { OrDivider, SsoButtons } from "@/components/sso-buttons";
 
 /** Mirrors the @Size on RegisterRequest.password, so the server never has to say no. */
 const MIN_PASSWORD_LENGTH = 12;
@@ -56,10 +57,17 @@ export default function RegisterPage() {
 
   return (
     <>
-      <h1 className="font-display text-[26px] font-semibold tracking-tight">Create your workspace</h1>
-      <p className="mt-1 mb-5 text-[13px] text-muted">
-        Your organization and your first account, in one step.
+      <h1 className="font-display text-[38px] font-semibold leading-tight tracking-tight">
+        Create your workspace
+      </h1>
+      <p className="mt-2 mb-6 text-[16px] text-muted">
+        Free to start. Your organization and your first account, in one step.
       </p>
+
+      <SsoButtons verb="Sign up" />
+      <div className="my-6">
+        <OrDivider>or sign up with email</OrDivider>
+      </div>
 
       <form onSubmit={onSubmit} className="space-y-4">
         <Field label="Your name" error={fieldErrors.name}>
@@ -112,9 +120,9 @@ export default function RegisterPage() {
         </Button>
       </form>
 
-      <p className="mt-5 text-center text-[13px] text-muted">
+      <p className="mt-6 text-center text-[14px] text-muted">
         Already have an account?{" "}
-        <Link href="/login" className="font-medium text-clay hover:underline">
+        <Link href="/login" className="font-semibold text-accent hover:underline">
           Sign in
         </Link>
       </p>

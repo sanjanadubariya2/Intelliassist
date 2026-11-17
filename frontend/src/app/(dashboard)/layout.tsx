@@ -136,7 +136,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
             <Logo />
           </Link>
           <button
-            className="ml-auto text-muted lg:hidden"
+            className="ml-auto grid h-11 w-11 place-items-center rounded-xl text-muted lg:hidden"
             onClick={() => setMenuOpen(false)}
             aria-label="Close menu"
           >
@@ -146,18 +146,24 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
 
         {/* Organization context. A single organization today, so it reads as a
             label rather than pretending to be a switcher that switches nothing. */}
-        <div className="mx-4 mb-2 rounded-xl bg-cream px-3 py-2 ring-1 ring-line">
-          <p className="text-[10.5px] font-medium uppercase tracking-wider text-faint">
-            Workspace
-          </p>
-          <p className="truncate text-[13px] font-medium">{user.organization.name}</p>
+        <div className="mx-4 mb-2 flex items-center gap-2.5 rounded-xl bg-cream px-3 py-2 ring-1 ring-line">
+          <span
+            className="grid h-8 w-8 shrink-0 place-items-center rounded-lg bg-clay-soft text-[13px] font-semibold text-clay-strong"
+            aria-hidden
+          >
+            {user.organization.name.slice(0, 1).toUpperCase()}
+          </span>
+          <span className="min-w-0">
+            <span className="block truncate text-[14px] font-semibold">{user.organization.name}</span>
+            <span className="block text-[12px] text-muted">Workspace</span>
+          </span>
         </div>
 
         <nav className="flex-1 overflow-y-auto px-3 pb-3" aria-label="Main">
           {NAV.map((group, index) => (
             <div key={group.heading ?? index} className={group.heading ? "mt-5" : "mt-2"}>
               {group.heading && (
-                <p className="mb-1 px-3 text-[10.5px] font-semibold uppercase tracking-wider text-faint">
+                <p className="mb-1.5 px-3 text-[11px] font-semibold uppercase tracking-wider text-muted">
                   {group.heading}
                 </p>
               )}
@@ -170,17 +176,21 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
                       href={href}
                       aria-current={active ? "page" : undefined}
                       className={cx(
-                        "flex items-center gap-2.5 rounded-xl px-3 py-2 text-[13.5px] transition-colors",
+                        "flex min-h-10 items-center gap-3 rounded-xl px-3 text-[14px] transition-colors",
                         active
-                          ? "bg-clay-soft font-medium text-ink"
-                          : "text-muted hover:bg-cream hover:text-ink",
+                          ? "bg-clay-soft font-semibold text-clay-strong"
+                          : "font-medium text-[#4a3d35] hover:bg-cream hover:text-ink",
                       )}
                     >
-                      <Icon className={cx("h-4 w-4 shrink-0", active && "text-clay")} />
+                      <Icon className="h-[18px] w-[18px] shrink-0" />
                       <span className="flex-1">{label}</span>
-                      {badge === "new" && <Sparkles className="h-3.5 w-3.5 text-clay" />}
+                      {badge === "new" && (
+                        <span className="rounded-full bg-clay-soft px-2 text-[11px] font-semibold leading-5 text-clay-strong">
+                          New
+                        </span>
+                      )}
                       {badge === "inbox" && waiting > 0 && (
-                        <span className="rounded-full bg-clay px-1.5 text-[11px] font-semibold leading-[18px] text-white">
+                        <span className="rounded-full bg-clay px-2 text-[11px] font-semibold leading-5 text-white">
                           {waiting > 99 ? "99+" : waiting}
                         </span>
                       )}
@@ -192,22 +202,21 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
           ))}
         </nav>
 
-        <div className="border-t border-line p-3">
-          <div className="flex items-center gap-2.5 px-2 py-1.5">
-            <Avatar name={user.user.name} />
-            <span className="min-w-0 flex-1">
-              <span className="block truncate text-[13px] font-medium">{user.user.name}</span>
-              <span className="block truncate text-[11.5px] capitalize text-muted">
-                {user.role.toLowerCase()}
-              </span>
+        <div className="flex items-center gap-2.5 border-t border-line px-4 py-3">
+          <Avatar name={user.user.name} className="h-9 w-9" />
+          <span className="min-w-0 flex-1">
+            <span className="block truncate text-[14px] font-semibold">{user.user.name}</span>
+            <span className="block truncate text-[12px] capitalize text-muted">
+              {user.role.toLowerCase()}
             </span>
-          </div>
+          </span>
           <button
             onClick={signOut}
-            className="mt-1 flex w-full items-center gap-2.5 rounded-xl px-3 py-2 text-sm text-muted transition-colors hover:bg-cream hover:text-ink"
+            aria-label="Sign out"
+            title="Sign out"
+            className="grid h-11 w-11 place-items-center rounded-xl text-muted transition-colors hover:bg-cream hover:text-ink"
           >
-            <LogOut className="h-4 w-4" />
-            Sign out
+            <LogOut className="h-[18px] w-[18px]" />
           </button>
         </div>
       </aside>
@@ -237,7 +246,11 @@ function Topbar({ onOpenMenu, waiting }: { onOpenMenu: () => void; waiting: numb
 
   return (
     <header className="sticky top-0 z-20 flex items-center gap-3 border-b border-line bg-canvas/85 px-4 py-3 backdrop-blur sm:px-6 lg:px-8">
-      <button onClick={onOpenMenu} aria-label="Open menu" className="lg:hidden">
+      <button
+        onClick={onOpenMenu}
+        aria-label="Open menu"
+        className="grid h-11 w-11 place-items-center rounded-xl lg:hidden"
+      >
         <Menu className="h-5 w-5 text-muted" />
       </button>
 
@@ -256,29 +269,34 @@ function Topbar({ onOpenMenu, waiting }: { onOpenMenu: () => void; waiting: numb
           onChange={(event) => setQuery(event.target.value)}
           placeholder="Search bots and conversations…"
           aria-label="Search"
-          className="w-full rounded-xl border border-line bg-surface py-2 pl-9 pr-3 text-sm placeholder:text-faint focus:border-clay/60 focus:outline-none focus:ring-2 focus:ring-clay/15"
+          className="min-h-11 w-full rounded-xl border border-[#e2d4c5] bg-surface py-2 pl-9 pr-3 text-sm placeholder:text-muted focus:border-clay/60 focus:outline-none focus:ring-2 focus:ring-clay/15"
         />
       </form>
 
-      <div className="ml-auto flex items-center gap-1.5">
+      <div className="ml-auto flex items-center gap-2">
         <Link
           href="/ask"
-          className="hidden items-center gap-1.5 rounded-xl border border-line bg-surface px-3 py-2 text-[13px] font-medium text-ink transition-colors hover:border-clay/40 sm:inline-flex"
+          className="hidden min-h-11 items-center gap-2 rounded-xl bg-clay-soft px-3.5 text-[14px] font-semibold text-clay-strong transition-colors hover:bg-[#f7dccd] sm:inline-flex"
         >
-          <Sparkles className="h-4 w-4 text-clay" />
+          <Sparkles className="h-4 w-4" />
           Ask Intelli
         </Link>
         <Link
           href="/inbox"
           title={waiting ? `${waiting} conversation${waiting === 1 ? "" : "s"} waiting` : "Handoff inbox"}
           aria-label={waiting ? `Handoff inbox, ${waiting} waiting` : "Handoff inbox"}
-          className="relative grid h-9 w-9 place-items-center rounded-xl text-muted transition-colors hover:bg-surface hover:text-ink"
+          className="relative grid h-11 w-11 place-items-center rounded-xl border border-line bg-surface text-ink transition-colors hover:bg-cream"
         >
-          <Bell className="h-4.5 w-4.5" />
-          {/* Only lit when something is actually waiting. A dot that is always
-              on is a dot nobody looks at. */}
+          <Bell className="h-[18px] w-[18px]" />
+          {/* Only shown when something is actually waiting. A badge that is
+              always on is a badge nobody looks at. */}
           {waiting > 0 && (
-            <span className="absolute right-2 top-2 h-2 w-2 rounded-full bg-clay ring-2 ring-canvas" aria-hidden />
+            <span
+              className="absolute -right-1.5 -top-1.5 grid min-w-[18px] place-items-center rounded-full bg-clay px-1 text-[11px] font-semibold leading-[18px] text-white"
+              aria-hidden
+            >
+              {waiting > 99 ? "99+" : waiting}
+            </span>
           )}
         </Link>
       </div>

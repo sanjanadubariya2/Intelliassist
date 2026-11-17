@@ -1,20 +1,18 @@
 "use client";
 
 import { useState } from "react";
-import { Globe, Trash2 } from "lucide-react";
+import { Globe, Info } from "lucide-react";
 import { api } from "@/lib/api";
 import { useAsync } from "@/lib/hooks";
 import { WithBot } from "@/components/bot-picker";
 import {
+  Badge,
   Button,
   Card,
-  CardHeader,
   Empty,
   ErrorNote,
-  Field,
   Input,
   Loading,
-  Modal,
   formatDate,
   notify,
 } from "@/components/ui";
@@ -30,7 +28,7 @@ export default function DomainsPage() {
   return (
     <WithBot
       title="Domains"
-      description="Where each bot's widget is allowed to run."
+      description="Your widget only loads on websites listed here, so nobody can copy your embed code onto another site and spend your usage."
     >
       {(bot) => <DomainList key={bot.id} botId={bot.id} />}
     </WithBot>
@@ -42,16 +40,18 @@ function DomainList({ botId }: { botId: string }) {
     () => api.credentials.listDomains(botId),
     [botId],
   );
-  const [adding, setAdding] = useState(false);
 
   return (
-    <>
-      <Card>
-        <CardHeader
-          title="Allowed domains"
-          description="Without at least one, every widget request is rejected with 401."
-          action={<Button onClick={() => setAdding(true)}>Add domain</Button>}
-        />
+    <div className="flex flex-col gap-5">
+      <AddDomain botId={botId} onAdded={reload} />
+
+      <Card className="overflow-hidden">
+        <div className="px-6 pb-2 pt-5">
+          <h2 className="font-display text-[20px] font-semibold">Allowed domains</h2>
+          <p className="mt-1 text-[13px] text-muted">
+            Without at least one, every widget request is rejected with 401.
+          </p>
+        </div>
 
         {loading ? (
           <Loading />
@@ -64,63 +64,67 @@ function DomainList({ botId }: { botId: string }) {
             icon={<Globe className="h-7 w-7" />}
             title="No domains yet"
             description="Add the domain your widget will run on. Until then the key answers nobody."
-            action={<Button onClick={() => setAdding(true)}>Add a domain</Button>}
           />
         ) : (
-          <ul className="divide-y divide-line">
-            {data.map((domain) => (
-              <li key={domain.id} className="flex items-center justify-between px-5 py-3.5">
-                <div className="flex items-center gap-2.5">
-                  <Globe className="h-4 w-4 text-faint" />
-                  <div>
-                    <p className="text-sm font-medium">{domain.domain}</p>
-                    <p className="text-[12px] text-muted">
-                      Added {formatDate(domain.createdAt)}
-                    </p>
-                  </div>
-                </div>
-                <button
-                  onClick={async () => {
-                    try {
-                      await api.credentials.removeDomain(domain.id);
-                      notify.success(`${domain.domain} removed`);
-                      reload();
-                    } catch (caught) {
-                      notify.failure(caught, "Could not remove the domain.");
-                    }
-                  }}
-                  aria-label={`Remove ${domain.domain}`}
-                  className="rounded-md p-1.5 text-faint hover:bg-bad-soft hover:text-bad"
-                >
-                  <Trash2 className="h-4 w-4" />
-                </button>
-              </li>
-            ))}
-          </ul>
+          <div className="overflow-x-auto">
+            <table className="w-full text-[14px]">
+              <thead>
+                <tr className="border-b border-line text-left text-[12px] font-semibold text-muted">
+                  <th className="px-6 py-3">Domain</th>
+                  <th className="px-4 py-3">Added</th>
+                  <th className="px-4 py-3">Status</th>
+                  <th className="px-6 py-3">
+                    <span className="sr-only">Actions</span>
+                  </th>
+                </tr>
+              </thead>
+              <tbody>
+                {data.map((domain) => (
+                  <tr key={domain.id} className="border-b border-[#f3ece4] last:border-0">
+                    <td className="px-6 py-3.5 font-semibold">{domain.domain}</td>
+                    <td className="whitespace-nowrap px-4 py-3.5 text-muted">{formatDate(domain.createdAt)}</td>
+                    <td className="px-4 py-3.5">
+                      <Badge tone="ok">Allowed</Badge>
+                    </td>
+                    <td className="px-6 py-3.5 text-right">
+                      <Button
+                        size="sm"
+                        variant="secondary"
+                        aria-label={`Remove ${domain.domain}`}
+                        onClick={async () => {
+                          try {
+                            await api.credentials.removeDomain(domain.id);
+                            notify.success(`${domain.domain} removed`);
+                            reload();
+                          } catch (caught) {
+                            notify.failure(caught, "Could not remove the domain.");
+                          }
+                        }}
+                      >
+                        Remove
+                      </Button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
         )}
       </Card>
 
-      <AddDomain
-        botId={botId}
-        open={adding}
-        onClose={() => setAdding(false)}
-        onAdded={reload}
-      />
-    </>
+      <section className="flex items-start gap-3.5 rounded-2xl bg-sage-soft px-5 py-4">
+        <Info className="mt-0.5 h-5 w-5 shrink-0 text-[#3e5a3c]" aria-hidden />
+        <p className="text-[14px] leading-normal text-[#2f4a2d]">
+          Scheme, port and path are ignored: <strong>acme.com</strong> covers every page on it. Add{" "}
+          <strong>localhost</strong> while you test on your own machine.
+        </p>
+      </section>
+    </div>
   );
 }
 
-function AddDomain({
-  botId,
-  open,
-  onClose,
-  onAdded,
-}: {
-  botId: string;
-  open: boolean;
-  onClose: () => void;
-  onAdded: () => void;
-}) {
+/** Inline, as in the design: adding a domain is the main thing done here. */
+function AddDomain({ botId, onAdded }: { botId: string; onAdded: () => void }) {
   const [domain, setDomain] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -131,8 +135,8 @@ function AddDomain({
     setError(null);
     try {
       await api.credentials.addDomain(botId, { domain });
+      notify.success(`${domain} allowed`);
       setDomain("");
-      onClose();
       onAdded();
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : "Could not add the domain.");
@@ -142,30 +146,22 @@ function AddDomain({
   }
 
   return (
-    <Modal open={open} onClose={onClose} title="Allow a domain">
-      <form onSubmit={submit} className="space-y-4">
-        <Field
-          label="Domain"
-          hint="Scheme, port and path are ignored — acme.com covers every page on it."
-        >
+    <Card className="p-6">
+      <form onSubmit={submit} className="flex flex-wrap items-end gap-3">
+        <label className="flex min-w-0 flex-[1_1_320px] flex-col gap-1.5">
+          <span className="text-[14px] font-semibold">Allow a domain</span>
           <Input
             required
-            autoFocus
             value={domain}
             onChange={(event) => setDomain(event.target.value)}
-            placeholder="acme.com"
+            placeholder="shop.example.com"
           />
-        </Field>
-        {error && <p className="text-[13px] text-bad">{error}</p>}
-        <div className="flex justify-end gap-2">
-          <Button type="button" variant="secondary" onClick={onClose}>
-            Cancel
-          </Button>
-          <Button type="submit" loading={busy}>
-            Add domain
-          </Button>
-        </div>
+        </label>
+        <Button type="submit" loading={busy}>
+          Add domain
+        </Button>
       </form>
-    </Modal>
+      {error && <p className="mt-2 text-[13px] text-bad">{error}</p>}
+    </Card>
   );
 }

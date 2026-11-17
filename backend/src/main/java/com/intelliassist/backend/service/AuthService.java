@@ -10,14 +10,18 @@ import com.intelliassist.backend.entity.MemberRole;
 import com.intelliassist.backend.entity.Organization;
 import com.intelliassist.backend.entity.OrganizationMember;
 import com.intelliassist.backend.entity.User;
+import com.intelliassist.backend.entity.UserIdentity;
 import com.intelliassist.backend.exception.AuthenticationFailedException;
 import com.intelliassist.backend.exception.DuplicateResourceException;
 import com.intelliassist.backend.exception.ResourceNotFoundException;
 import com.intelliassist.backend.repository.OrganizationMemberRepository;
 import com.intelliassist.backend.repository.OrganizationRepository;
+import com.intelliassist.backend.repository.UserIdentityRepository;
 import com.intelliassist.backend.repository.UserRepository;
 import com.intelliassist.backend.security.AuthenticatedUser;
 import com.intelliassist.backend.security.JwtService;
+import com.intelliassist.backend.security.oauth.OAuthException;
+import com.intelliassist.backend.security.oauth.OAuthProfile;
 import java.util.List;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -37,18 +41,21 @@ public class AuthService {
     private final OrganizationMemberRepository memberRepository;
     private final PasswordEncoder passwordEncoder;
     private final JwtService jwtService;
+    private final UserIdentityRepository identityRepository;
 
     public AuthService(
             UserRepository userRepository,
             OrganizationRepository organizationRepository,
             OrganizationMemberRepository memberRepository,
             PasswordEncoder passwordEncoder,
-            JwtService jwtService) {
+            JwtService jwtService,
+            UserIdentityRepository identityRepository) {
         this.userRepository = userRepository;
         this.organizationRepository = organizationRepository;
         this.memberRepository = memberRepository;
         this.passwordEncoder = passwordEncoder;
         this.jwtService = jwtService;
+        this.identityRepository = identityRepository;
     }
 
     /**
@@ -75,35 +82,125 @@ public class AuthService {
                                 email,
                                 passwordEncoder.encode(request.password())));
 
-        String slug =
-                SlugGenerator.generate(
-                        request.organizationName(), organizationRepository::existsBySlug);
-
-        Organization organization;
-        try {
-            organization =
-                    organizationRepository.saveAndFlush(
-                            new Organization(request.organizationName().strip(), slug));
-        } catch (DataIntegrityViolationException exception) {
-            // Two registrations racing on the same organization name: both
-            // found the slug free, one lost. The unique constraint is what
-            // actually guarantees correctness; the pre-check is only an
-            // optimisation.
-            throw new DuplicateResourceException(
-                    "That organization name was just taken. Please try again.");
-        }
+        Organization organization = createOrganization(request.organizationName().strip());
 
         OrganizationMember membership =
                 memberRepository.save(
                         new OrganizationMember(organization, user, MemberRole.OWNER));
 
-        log.info(
-                "registered user {} and organization {} ({})",
-                user.getId(),
-                organization.getId(),
-                slug);
+        log.info("registered user {} and organization {}", user.getId(), organization.getId());
 
         return buildAuthResponse(user, organization, membership.getRole());
+    }
+
+    /**
+     * Signs in someone a provider (Google, GitHub, LinkedIn) has vouched for.
+     *
+     * <p>Three cases, in this order:
+     *
+     * <ol>
+     *   <li>The provider account is already linked: that user signs in.
+     *   <li>It is not linked, but a user already has the same address. If that
+     *       user also came from a provider (no password), the address was
+     *       verified when they did, so this provider account is linked to
+     *       them. If they have a password, it is refused: password sign-up
+     *       does not verify addresses, so whoever registered first may not own
+     *       it, and linking would hand them the real owner's sign-ins.
+     *   <li>Nobody has the address: a new user is created with no password,
+     *       along with a workspace of their own that they own.
+     * </ol>
+     */
+    @Transactional
+    public AuthResponse signInWithProvider(OAuthProfile profile) {
+        var linked =
+                identityRepository.findByProviderAndSubject(profile.provider(), profile.subject());
+        if (linked.isPresent()) {
+            User user = linked.get().getUser();
+            log.info("sso login via {} for user {}", profile.provider(), user.getId());
+            return signInExisting(user);
+        }
+
+        if (profile.email() == null || !profile.emailVerified()) {
+            throw new OAuthException(
+                    "no_verified_email", "The provider did not share a verified email address");
+        }
+
+        String email = User.normalizeEmail(profile.email());
+        var existing = userRepository.findByEmail(email);
+        if (existing.isPresent()) {
+            User user = existing.get();
+            if (user.getPasswordHash() != null) {
+                throw new OAuthException(
+                        "account_exists",
+                        "An account with this email already exists. Sign in with your password.");
+            }
+            link(user, profile);
+            log.info("linked {} to existing user {}", profile.provider(), user.getId());
+            return signInExisting(user);
+        }
+
+        String name = displayName(profile.name(), email);
+        User user = userRepository.save(new User(name, email, null));
+        Organization organization = createOrganization(workspaceName(name));
+        OrganizationMember membership =
+                memberRepository.save(
+                        new OrganizationMember(organization, user, MemberRole.OWNER));
+        link(user, profile);
+
+        log.info(
+                "registered user {} via {} with organization {}",
+                user.getId(),
+                profile.provider(),
+                organization.getId());
+        return buildAuthResponse(user, organization, membership.getRole());
+    }
+
+    private void link(User user, OAuthProfile profile) {
+        identityRepository.save(
+                new UserIdentity(user, profile.provider(), profile.subject(), profile.email()));
+    }
+
+    private AuthResponse signInExisting(User user) {
+        List<OrganizationMember> memberships = memberRepository.findAllByUserId(user.getId());
+        if (memberships.isEmpty()) {
+            throw new OAuthException("no_organization", "Account has no organization");
+        }
+        // Oldest membership is the default, exactly as for password login.
+        OrganizationMember active = memberships.get(0);
+        return buildAuthResponse(user, active.getOrganization(), active.getRole());
+    }
+
+    /**
+     * Creates an organization with a unique slug.
+     *
+     * <p>Two sign-ups racing on the same name can both find the slug free and
+     * one loses. The unique constraint is what actually guarantees
+     * correctness; the pre-check is only an optimisation.
+     */
+    private Organization createOrganization(String name) {
+        String slug = SlugGenerator.generate(name, organizationRepository::existsBySlug);
+        try {
+            return organizationRepository.saveAndFlush(new Organization(name, slug));
+        } catch (DataIntegrityViolationException exception) {
+            throw new DuplicateResourceException(
+                    "That organization name was just taken. Please try again.");
+        }
+    }
+
+    /** The provider's name, else the part of the address before the {@code @}. */
+    static String displayName(String providerName, String email) {
+        String name = providerName != null ? providerName.strip() : "";
+        if (name.isEmpty()) {
+            name = email.substring(0, email.indexOf('@'));
+        }
+        return name.length() > 200 ? name.substring(0, 200) : name;
+    }
+
+    /** "Ada's workspace", from the first word of the name. */
+    static String workspaceName(String name) {
+        String first = name.strip().split("\\s+")[0];
+        String workspace = first + "'s workspace";
+        return workspace.length() > 200 ? workspace.substring(0, 200) : workspace;
     }
 
     /**
@@ -127,6 +224,13 @@ public class AuthService {
         }
 
         User user = maybeUser.get();
+        if (user.getPasswordHash() == null) {
+            // Created through a provider and never given a password. Same cost
+            // and same answer as a wrong password, for the same reason.
+            passwordEncoder.matches(request.password(), DUMMY_HASH);
+            log.warn("password login for provider-only user {}", user.getId());
+            throw AuthenticationFailedException.invalidCredentials();
+        }
         if (!passwordEncoder.matches(request.password(), user.getPasswordHash())) {
             log.warn("failed login for user {}", user.getId());
             throw AuthenticationFailedException.invalidCredentials();

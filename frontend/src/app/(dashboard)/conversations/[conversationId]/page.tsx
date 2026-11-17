@@ -62,26 +62,18 @@ export default function ConversationPage({
 
   return (
     <>
-      <Link
-        href="/conversations"
-        className="mb-4 inline-flex items-center gap-1.5 text-[13px] text-muted hover:text-ink"
-      >
-        <ArrowLeft className="h-3.5 w-3.5" />
-        All conversations
-      </Link>
+      <nav aria-label="Breadcrumb" className="mb-4 flex items-center gap-1.5 text-[14px]">
+        <ArrowLeft className="h-3.5 w-3.5 text-muted" aria-hidden />
+        <Link href="/conversations" className="font-medium text-accent hover:underline">
+          Conversations
+        </Link>
+        <span className="truncate text-muted">/ {conversation.title ?? "Untitled conversation"}</span>
+      </nav>
 
-      <div className="mb-5 flex flex-wrap items-start justify-between gap-3">
-        <div>
-          <h1 className="font-display text-[26px] font-semibold tracking-tight">
-            {conversation.visitorId
-              ? `Visitor ${conversation.visitorId.slice(0, 10)}`
-              : "Conversation"}
-          </h1>
-          <p className="mt-0.5 text-[13px] text-muted">
-            {conversation.title ?? "Untitled"} · {conversation.botName} · started{" "}
-            {formatDate(conversation.startedAt)} · {conversation.messageCount} messages
-          </p>
-        </div>
+      <div className="mb-6 flex flex-wrap items-center justify-between gap-3">
+        <h1 className="min-w-0 flex-[1_1_360px] font-display text-[30px] font-semibold leading-tight tracking-tight sm:text-[32px]">
+          {conversation.title ?? "Untitled conversation"}
+        </h1>
 
         <div className="flex flex-wrap items-center gap-2">
           <ResolutionBadge resolution={conversation.resolution} />
@@ -115,25 +107,34 @@ export default function ConversationPage({
         </div>
       </div>
 
-      <div className="grid grid-cols-1 gap-4 xl:grid-cols-[minmax(0,1fr)_340px]">
+      <div className="grid grid-cols-1 gap-5 xl:grid-cols-[minmax(0,1fr)_340px]">
         <Card>
-          <CardHeader title="Transcript" />
-          <div className="space-y-5 bg-cream/60 p-5">
+          <div className="space-y-5 p-6">
+            <p className="text-center text-[12px] text-muted">
+              {formatDate(conversation.startedAt)} · started{" "}
+              {conversation.visitorId ? "from the website widget" : "from the dashboard"}
+            </p>
             {messages.map((message) =>
               message.role === "USER" ? (
                 <div key={message.id} className="flex justify-end">
-                  <div className="max-w-[78%]">
-                    <p className="rounded-2xl rounded-br-md bg-clay-soft px-3.5 py-2.5 text-sm">
-                      {message.content}
+                  <div className="max-w-[75%]">
+                    <p className="mb-1 text-right text-[12px] font-semibold text-muted">
+                      Customer · {formatTime(message.createdAt)}
                     </p>
-                    <p className="mt-1 text-right text-[11.5px] text-faint">
-                      {formatTime(message.createdAt)}
+                    <p className="rounded-2xl rounded-br-[4px] bg-accent px-4 py-3 text-[15px] leading-normal text-white">
+                      {message.content}
                     </p>
                   </div>
                 </div>
               ) : (
                 <div key={message.id} className="max-w-[85%] space-y-2">
-                  <p className="rounded-2xl rounded-bl-md border border-line bg-surface px-3.5 py-2.5 text-sm whitespace-pre-wrap">
+                  <p className="text-[12px] font-semibold text-muted">{conversation.botName}</p>
+                  <p
+                    className={cx(
+                      "whitespace-pre-wrap rounded-2xl rounded-bl-[4px] border px-4 py-3 text-[15px] leading-relaxed",
+                      message.grounded === false ? "border-[#f0dcae] bg-[#fffbf2]" : "border-line bg-cream",
+                    )}
+                  >
                     {message.content}
                   </p>
 
@@ -163,9 +164,10 @@ export default function ConversationPage({
 
                   {/* Operator detail: how the answer was produced. Present on
                       the dashboard DTO and deliberately absent from the widget's. */}
-                  <p className="flex flex-wrap items-center gap-2 text-[11.5px] text-faint">
+                  <p className="flex flex-wrap items-center gap-2 text-[12px] text-muted">
                     <span>{formatTime(message.createdAt)}</span>
                     {message.grounded === false && <Badge tone="warn">Not grounded</Badge>}
+                    {message.grounded === true && <Badge tone="ok">Grounded</Badge>}
                     {message.model && <span>· {message.model}</span>}
                     {message.latencyMs != null && <span>· {message.latencyMs} ms</span>}
                   </p>
@@ -175,7 +177,37 @@ export default function ConversationPage({
           </div>
         </Card>
 
-        <Notes conversationId={conversationId} notes={notes} onAdded={reload} />
+        <aside className="flex flex-col gap-5">
+          <Card className="p-5">
+            <h2 className="mb-3.5 text-[12px] font-semibold uppercase tracking-[0.06em] text-muted">Details</h2>
+            <dl className="grid grid-cols-[auto_minmax(0,1fr)] gap-x-4 gap-y-2.5 text-[14px]">
+              <dt className="text-muted">Bot</dt>
+              <dd className="truncate font-medium">
+                <Link href={`/bots/${conversation.botId}`} className="text-accent hover:underline">
+                  {conversation.botName}
+                </Link>
+              </dd>
+              <dt className="text-muted">Visitor</dt>
+              <dd className="truncate font-medium">
+                {conversation.visitorId ? conversation.visitorId.slice(0, 10) : "Dashboard test"}
+              </dd>
+              <dt className="text-muted">Started</dt>
+              <dd className="font-medium">{formatDate(conversation.startedAt)}</dd>
+              <dt className="text-muted">Messages</dt>
+              <dd className="font-medium">{conversation.messageCount}</dd>
+              <dt className="text-muted">Grounded</dt>
+              <dd className="font-medium">
+                {messages.filter((m) => m.grounded === true).length} of{" "}
+                {messages.filter((m) => m.role !== "USER").length} replies
+              </dd>
+              <dt className="text-muted">Status</dt>
+              <dd>
+                <ResolutionBadge resolution={conversation.resolution} />
+              </dd>
+            </dl>
+          </Card>
+          <Notes conversationId={conversationId} notes={notes} onAdded={reload} />
+        </aside>
       </div>
     </>
   );

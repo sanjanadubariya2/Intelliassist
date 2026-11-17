@@ -51,8 +51,16 @@ export default function BotsPage() {
   const [page, setPage] = useState(0);
   const { data, loading, error, reload } = useAsync(() => loadBots(page), [page]);
   const [creating, setCreating] = useState(false);
+  const [query, setQuery] = useState("");
+  const [status, setStatus] = useState<"ALL" | "ACTIVE" | "INACTIVE">("ALL");
 
   const bots = data?.bots ?? [];
+  // Filters the page already loaded; the API has no name search.
+  const visible = bots.filter(
+    (bot) =>
+      (status === "ALL" || bot.status === status) &&
+      bot.name.toLowerCase().includes(query.trim().toLowerCase()),
+  );
   const total = data?.total ?? 0;
   const firstShown = total === 0 ? 0 : page * PAGE_SIZE + 1;
   const lastShown = Math.min(total, (page + 1) * PAGE_SIZE);
@@ -84,73 +92,68 @@ export default function BotsPage() {
           />
         </Card>
       ) : (
-        <Card className="overflow-hidden">
-          <div className="overflow-x-auto">
-            <table className="w-full text-sm">
-              <thead>
-                <tr className="border-b border-line text-left text-[12px] text-muted">
-                  <th className="px-5 py-3 font-medium">Name</th>
-                  <th className="px-5 py-3 font-medium">Description</th>
-                  <th className="px-5 py-3 font-medium">Status</th>
-                  <th className="px-5 py-3 font-medium">Messages</th>
-                  <th className="px-5 py-3 font-medium">Updated</th>
-                  <th className="px-5 py-3" />
-                </tr>
-              </thead>
-              <tbody>
-                {bots.map((bot) => (
-                  <tr
-                    key={bot.id}
-                    onClick={() => router.push(`/bots/${bot.id}`)}
-                    className="cursor-pointer border-b border-line last:border-0 hover:bg-canvas"
+        <>
+          <div className="mb-5 flex flex-wrap items-center gap-2.5">
+            <label className="w-full max-w-[340px] flex-[1_1_240px]">
+              <span className="sr-only">Filter bots</span>
+              <Input
+                value={query}
+                onChange={(event) => setQuery(event.target.value)}
+                placeholder="Filter by name"
+              />
+            </label>
+            <div role="group" aria-label="Status" className="flex gap-1 rounded-xl bg-[#f3ece4] p-1">
+              {(["ALL", "ACTIVE", "INACTIVE"] as const).map((value) => {
+                const count = value === "ALL" ? bots.length : bots.filter((b) => b.status === value).length;
+                const label = value === "ALL" ? "All" : value === "ACTIVE" ? "Online" : "Paused";
+                return (
+                  <button
+                    key={value}
+                    type="button"
+                    aria-pressed={status === value}
+                    onClick={() => setStatus(value)}
+                    className={cx(
+                      "min-h-9 rounded-[9px] px-3.5 text-[13px]",
+                      status === value ? "bg-surface font-semibold text-ink shadow-sm" : "font-medium text-[#5f5249]",
+                    )}
                   >
-                    <td className="px-5 py-3.5">
-                      {/* A real link inside the clickable row, so the keyboard
-                          and middle-click both work. */}
-                      <Link
-                        href={`/bots/${bot.id}`}
-                        className="font-medium hover:text-accent"
-                        onClick={(event) => event.stopPropagation()}
-                      >
-                        {bot.name}
-                      </Link>
-                    </td>
-                    <td className="max-w-xs px-5 py-3.5">
-                      <span className="block truncate text-muted">
-                        {bot.description ?? "—"}
-                      </span>
-                    </td>
-                    <td className="px-5 py-3.5">
-                      <span
-                        className={cx(
-                          "flex items-center gap-1.5 text-[12.5px]",
-                          bot.status === "ACTIVE" ? "text-ok" : "text-warn",
-                        )}
-                      >
-                        <span
-                          className={cx(
-                            "h-1.5 w-1.5 rounded-full",
-                            bot.status === "ACTIVE" ? "bg-ok" : "bg-warn",
-                          )}
-                        />
-                        {bot.status === "ACTIVE" ? "Online" : "Maintenance"}
-                      </span>
-                    </td>
-                    <td className="px-5 py-3.5 text-muted">
-                      {formatNumber(data?.usageByBot.get(bot.id)?.totalMessages ?? 0)}
-                    </td>
-                    <td className="px-5 py-3.5 text-muted">{formatDate(bot.updatedAt)}</td>
-                    <td className="px-5 py-3.5 text-right">
-                      <RowMenu botId={bot.id} onChanged={reload} />
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+                    {label} · {count}
+                  </button>
+                );
+              })}
+            </div>
           </div>
 
-          <div className="flex items-center justify-between border-t border-line px-5 py-3">
-            <p className="text-[12.5px] text-muted">
+          <div className="grid grid-cols-[repeat(auto-fill,minmax(320px,1fr))] gap-4">
+            {visible.map((bot, index) => (
+              <BotCard
+                key={bot.id}
+                bot={bot}
+                usage={data?.usageByBot.get(bot.id)}
+                tint={TINTS[index % TINTS.length]}
+                onChanged={reload}
+              />
+            ))}
+            <button
+              type="button"
+              onClick={() => setCreating(true)}
+              className="flex min-h-[300px] flex-col items-center justify-center gap-2.5 rounded-2xl border-2 border-dashed border-[#e2d4c5] p-6 text-center text-[#4a3d35] transition-colors hover:border-clay/50 hover:bg-cream"
+            >
+              <span className="grid h-12 w-12 place-items-center rounded-full bg-accent-soft text-accent">
+                <Plus className="h-5 w-5" />
+              </span>
+              <span className="text-[16px] font-semibold text-ink">Create a bot</span>
+              <span className="max-w-[240px] text-[14px] text-muted">
+                Give it a name and a few documents. You can test it before anyone sees it.
+              </span>
+            </button>
+          </div>
+          {visible.length === 0 && (
+            <p className="mt-4 text-[14px] text-muted">No bots on this page match that filter.</p>
+          )}
+
+          <div className="mt-5 flex items-center justify-between">
+            <p className="text-[13px] text-muted">
               Showing {firstShown} to {lastShown} of {total} bots
             </p>
             <div className="flex gap-1">
@@ -172,7 +175,7 @@ export default function BotsPage() {
               </Button>
             </div>
           </div>
-        </Card>
+        </>
       )}
 
       <CreateBotModal
@@ -184,7 +187,92 @@ export default function BotsPage() {
   );
 }
 
-/** The row's overflow menu. Closes on any outside click. */
+/** Initial-tile colours, cycled so neighbouring bots are easy to tell apart. */
+const TINTS = [
+  "bg-accent-soft text-accent",
+  "bg-clay-soft text-clay-strong",
+  "bg-sage-soft text-[#3e5a3c]",
+];
+
+function BotCard({
+  bot,
+  usage,
+  tint,
+  onChanged,
+}: {
+  bot: Bot;
+  usage: BotUsage | undefined;
+  tint: string;
+  onChanged: () => void;
+}) {
+  const online = bot.status === "ACTIVE";
+  const grounded =
+    usage && usage.totalAnswers > 0
+      ? `${Math.round((usage.groundedAnswers / usage.totalAnswers) * 100)}%`
+      : "—";
+
+  return (
+    <article className="flex flex-col gap-4 rounded-2xl border border-line bg-surface p-5 shadow-soft">
+      <div className="flex items-center gap-3">
+        <span className={cx("grid h-12 w-12 shrink-0 place-items-center rounded-[14px] font-display text-[20px] font-semibold", tint)}>
+          {bot.name.slice(0, 1).toUpperCase()}
+        </span>
+        <div className="min-w-0 flex-1">
+          <h2 className="truncate text-[17px] font-semibold">
+            <Link href={`/bots/${bot.id}`} className="hover:text-accent">
+              {bot.name}
+            </Link>
+          </h2>
+          <p className="text-[13px] text-muted">
+            Language: {bot.defaultLanguage} · updated {formatDate(bot.updatedAt)}
+          </p>
+        </div>
+        <span
+          className={cx(
+            "rounded-full px-2.5 py-0.5 text-[12px] font-semibold",
+            online ? "bg-ok-soft text-ok" : "bg-warn-soft text-warn",
+          )}
+        >
+          {online ? "Online" : "Paused"}
+        </span>
+        <RowMenu botId={bot.id} onChanged={onChanged} />
+      </div>
+      <p className="line-clamp-2 min-h-[42px] text-[14px] leading-normal text-[#4a3d35]">
+        {bot.description ?? "No description yet."}
+      </p>
+      <dl className="grid grid-cols-3 gap-2 border-y border-[#f3ece4] py-3.5">
+        <div>
+          <dt className="text-[12px] text-muted">Conversations</dt>
+          <dd className="mt-0.5 text-[16px] font-semibold">{formatNumber(usage?.totalConversations ?? 0)}</dd>
+        </div>
+        <div>
+          <dt className="text-[12px] text-muted">Messages</dt>
+          <dd className="mt-0.5 text-[16px] font-semibold">{formatNumber(usage?.totalMessages ?? 0)}</dd>
+        </div>
+        <div>
+          <dt className="text-[12px] text-muted">Grounded</dt>
+          <dd className="mt-0.5 text-[16px] font-semibold">{grounded}</dd>
+        </div>
+      </dl>
+      <div className="flex gap-2">
+        <Link
+          href={`/playground?bot=${bot.id}`}
+          className="inline-flex min-h-11 flex-1 items-center justify-center rounded-xl border border-[#e2d4c5] bg-surface text-sm font-semibold hover:bg-cream"
+        >
+          Test
+        </Link>
+        <Link
+          href={`/bots/${bot.id}`}
+          className="inline-flex min-h-11 flex-1 items-center justify-center rounded-xl border border-[#e2d4c5] bg-surface text-sm font-semibold hover:bg-cream"
+        >
+          Manage
+        </Link>
+      </div>
+    </article>
+  );
+}
+
+/** The card's overflow menu. Closes on any outside click. */
 function RowMenu({ botId, onChanged }: { botId: string; onChanged: () => void }) {
   const [open, setOpen] = useState(false);
   const [confirming, setConfirming] = useState(false);
@@ -196,7 +284,7 @@ function RowMenu({ botId, onChanged }: { botId: string; onChanged: () => void })
         onClick={() => setOpen((current) => !current)}
         aria-label="Bot actions"
         aria-expanded={open}
-        className="rounded-md p-1.5 text-faint hover:bg-canvas hover:text-ink"
+        className="grid h-10 w-10 place-items-center rounded-xl text-muted hover:bg-canvas hover:text-ink"
       >
         <MoreVertical className="h-4 w-4" />
       </button>

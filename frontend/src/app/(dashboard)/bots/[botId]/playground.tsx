@@ -125,30 +125,26 @@ export function BotPlayground({ botId, botName }: { botId: string; botName?: str
     setBusy(false);
   }
 
+  // The panel explains the most recent finished answer.
+  const lastAnswer = [...turns].reverse().find((turn) => turn.role === "assistant" && turn.content && !turn.failed);
+
   return (
-    <Card className="flex h-[640px] flex-col overflow-hidden">
-      <div className="flex flex-wrap items-center justify-between gap-3 border-b border-line px-5 py-4">
+    <div className="flex flex-wrap items-stretch gap-5">
+    <Card className="flex h-[640px] min-w-0 flex-[999_1_480px] flex-col overflow-hidden">
+      <div className="flex flex-wrap items-center justify-between gap-3 border-b border-line px-6 py-4">
         <div>
-          <h2 className="font-display text-[20px] font-semibold">Chat Playground</h2>
-          <p className="text-[13px] text-muted">
-            Test how {botName ?? "your chatbot"} answers using your business data.
-          </p>
+          <h2 className="font-display text-[20px] font-semibold">{botName ?? "Your bot"}</h2>
+          <p className="text-[13px] text-muted">Nothing here reaches your customers.</p>
         </div>
-        <div className="flex items-center gap-2">
-          <span className="inline-flex items-center gap-1.5 rounded-full border border-line bg-surface px-2.5 py-1 text-[12px] font-medium">
-            <span className="h-2 w-2 rounded-full bg-ok" />
-            RAG Active
-          </span>
-          {turns.length > 0 && (
-            <Button size="sm" variant="secondary" onClick={reset}>
-              <RotateCcw className="h-3.5 w-3.5" />
-              New chat
-            </Button>
-          )}
-        </div>
+        {turns.length > 0 && (
+          <Button size="sm" variant="secondary" onClick={reset}>
+            <RotateCcw className="h-3.5 w-3.5" />
+            Reset chat
+          </Button>
+        )}
       </div>
 
-      <div ref={scroller} className="flex-1 space-y-5 overflow-y-auto bg-cream/60 p-5">
+      <div ref={scroller} className="flex-1 space-y-4 overflow-y-auto p-6">
         {turns.length === 0 && (
           <div className="mx-auto max-w-md py-10 text-center">
             <span className="mx-auto grid h-12 w-12 place-items-center rounded-full bg-accent text-white">
@@ -164,7 +160,7 @@ export function BotPlayground({ botId, botName }: { botId: string; botName?: str
                 <button
                   key={starter}
                   onClick={() => ask(starter)}
-                  className="rounded-full border border-line bg-surface px-3 py-1.5 text-[12.5px] text-muted transition-colors hover:border-clay/40 hover:text-ink"
+                  className="min-h-9 rounded-full border border-[#e2d4c5] bg-surface px-3.5 text-[13px] font-medium text-ink transition-colors hover:border-clay/40 hover:bg-cream"
                 >
                   {starter}
                 </button>
@@ -176,7 +172,7 @@ export function BotPlayground({ botId, botName }: { botId: string; botName?: str
         {turns.map((turn, index) =>
           turn.role === "user" ? (
             <div key={index} className="flex items-end justify-end gap-2">
-              <p className="max-w-[78%] rounded-2xl rounded-br-md bg-clay-soft px-4 py-2.5 text-sm text-ink">
+              <p className="max-w-[75%] rounded-2xl rounded-br-[4px] bg-accent px-4 py-3 text-[15px] leading-normal text-white">
                 {turn.content}
               </p>
               <Avatar name={user?.user.name ?? "You"} />
@@ -189,10 +185,12 @@ export function BotPlayground({ botId, botName }: { botId: string; botName?: str
               <div className="min-w-0 max-w-[85%] space-y-2">
                 <div
                   className={cx(
-                    "rounded-2xl rounded-tl-md px-4 py-2.5 text-sm shadow-soft",
+                    "rounded-2xl rounded-bl-[4px] px-4 py-3 text-[15px] leading-relaxed",
                     turn.failed
                       ? "border border-bad/20 bg-bad-soft text-bad"
-                      : "border border-line bg-surface whitespace-pre-wrap",
+                      : turn.ungrounded
+                        ? "whitespace-pre-wrap border border-[#f0dcae] bg-[#fffbf2]"
+                        : "whitespace-pre-wrap border border-line bg-cream",
                   )}
                 >
                   {turn.content || <Spinner />}
@@ -218,8 +216,9 @@ export function BotPlayground({ botId, botName }: { botId: string; botName?: str
                 </div>
 
                 {turn.ungrounded && !turn.failed && (
-                  <Badge tone="warn">No supporting document. Check KB Health for gaps</Badge>
+                  <Badge tone="warn">Not grounded: no supporting document. Check KB Health for gaps</Badge>
                 )}
+                {turn.citations && turn.citations.length > 0 && !turn.failed && <Badge tone="ok">Grounded</Badge>}
               </div>
             </div>
           ),
@@ -231,27 +230,85 @@ export function BotPlayground({ botId, botName }: { botId: string; botName?: str
           event.preventDefault();
           ask(input.trim());
         }}
-        className="border-t border-line bg-surface p-3"
+        className="flex gap-2.5 border-t border-line bg-surface px-6 pb-5 pt-4"
       >
-        <div className="flex items-center gap-2 rounded-full border border-line bg-cream py-1.5 pl-4 pr-1.5 focus-within:border-clay/50 focus-within:ring-2 focus-within:ring-clay/15">
-          <input
-            value={input}
-            onChange={(event) => setInput(event.target.value)}
-            placeholder="Ask anything about your business…"
-            aria-label="Your question"
-            disabled={busy}
-            className="min-w-0 flex-1 bg-transparent text-sm placeholder:text-faint focus:outline-none disabled:opacity-60"
-          />
-          <button
-            type="submit"
-            disabled={busy || !input.trim()}
-            aria-label="Send"
-            className="grid h-9 w-9 shrink-0 place-items-center rounded-full bg-accent text-white transition-colors hover:bg-accent-strong disabled:opacity-40"
-          >
-            {busy ? <Spinner className="text-white" /> : <Send className="h-4 w-4" />}
-          </button>
-        </div>
+        <input
+          value={input}
+          onChange={(event) => setInput(event.target.value)}
+          placeholder="Ask anything about your business…"
+          aria-label="Your question"
+          disabled={busy}
+          className="min-h-12 min-w-0 flex-1 rounded-[14px] border border-[#e2d4c5] bg-cream px-4 text-[15px] placeholder:text-muted focus:border-clay/50 focus:outline-none focus:ring-2 focus:ring-clay/15 disabled:opacity-60"
+        />
+        <button
+          type="submit"
+          disabled={busy || !input.trim()}
+          aria-label="Send"
+          className="grid h-12 w-12 shrink-0 place-items-center rounded-xl bg-accent text-white transition-colors hover:bg-accent-strong disabled:opacity-40"
+        >
+          {busy ? <Spinner className="text-white" /> : <Send className="h-4 w-4" />}
+        </button>
       </form>
     </Card>
+
+    <WhyThisAnswer turn={lastAnswer} />
+    </div>
+  );
+}
+
+/**
+ * The passages behind the latest answer, with their retrieval scores. This is
+ * the panel that tells a builder whether a wrong answer is a retrieval problem
+ * (wrong passage, low score) or a gap (no passage at all).
+ */
+function WhyThisAnswer({ turn }: { turn: Turn | undefined }) {
+  const citations = turn?.citations ?? [];
+  return (
+    <aside className="flex min-w-0 flex-[1_1_320px] flex-col gap-4 rounded-2xl border border-line bg-surface p-6 shadow-soft">
+      <div>
+        <h2 className="font-display text-[18px] font-semibold">Why this answer</h2>
+        <p className="mt-1 text-[13px] text-muted">
+          {turn ? "The passages behind the latest reply." : "Ask something to see which passages the bot used."}
+        </p>
+      </div>
+      {turn && (
+        <div className="flex flex-wrap gap-2">
+          {citations.length > 0 ? <Badge tone="ok">Grounded</Badge> : <Badge tone="warn">Not grounded</Badge>}
+          <Badge>
+            {citations.length} passage{citations.length === 1 ? "" : "s"}
+          </Badge>
+        </div>
+      )}
+      {turn && citations.length === 0 && (
+        <p className="rounded-xl bg-[#fffbf2] px-3.5 py-3 text-[13px] leading-normal text-[#7d520c]">
+          Nothing in the knowledge base matched, so the bot declined instead of guessing. Add a document that
+          covers this question.
+        </p>
+      )}
+      <ul className="flex flex-col gap-2.5">
+        {citations.map((citation) => {
+          const percent = Math.max(0, Math.min(100, Math.round(citation.score * 100)));
+          return (
+            <li
+              key={`${citation.documentId}-${citation.marker}`}
+              className="flex flex-col gap-2 rounded-xl border border-line px-3.5 py-3"
+            >
+              <div className="flex items-center gap-2">
+                <FileText className="h-3.5 w-3.5 shrink-0 text-clay" />
+                <span className="min-w-0 flex-1 truncate text-[13px] font-semibold">
+                  {citation.filename}
+                  {citation.pageNumber != null && ` · p.${citation.pageNumber}`}
+                </span>
+                <span className="text-[12px] text-muted">match {citation.score.toFixed(2)}</span>
+              </div>
+              <div className="h-1 rounded-full bg-[#f3ece4]" aria-hidden>
+                <div className="h-full rounded-full bg-accent" style={{ width: `${percent}%` }} />
+              </div>
+              <p className="line-clamp-3 text-[13px] leading-normal text-[#4a3d35]">{citation.snippet}</p>
+            </li>
+          );
+        })}
+      </ul>
+    </aside>
   );
 }

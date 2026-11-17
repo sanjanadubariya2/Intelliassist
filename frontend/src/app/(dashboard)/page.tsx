@@ -2,30 +2,8 @@
 
 import { useState } from "react";
 import Link from "next/link";
-import {
-  ArrowDownRight,
-  ArrowRight,
-  ArrowUpRight,
-  BarChart3,
-  Bot as BotIcon,
-  Clock,
-  HeartPulse,
-  Inbox,
-  MessagesSquare,
-  Plus,
-  ShieldCheck,
-  SlidersHorizontal,
-  Sparkles,
-} from "lucide-react";
-import {
-  Area,
-  AreaChart,
-  CartesianGrid,
-  ResponsiveContainer,
-  Tooltip,
-  XAxis,
-  YAxis,
-} from "recharts";
+import { ArrowDownRight, ArrowUpRight, Bot as BotIcon, Check, Plus } from "lucide-react";
+import { Bar, BarChart, CartesianGrid, Cell, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 import { api, type Bot, type BotUsage, type Conversation } from "@/lib/api";
 import { useAsync } from "@/lib/hooks";
 import { useAuth } from "@/lib/auth";
@@ -34,7 +12,6 @@ import { chart, chartAxis, chartTooltip } from "@/lib/theme";
 import {
   buttonLink,
   Card,
-  CardHeader,
   Empty,
   ErrorNote,
   Loading,
@@ -48,25 +25,39 @@ import {
 
 const RANGES = [
   { days: 7, label: "Last 7 days" },
+  { days: 14, label: "Last 14 days" },
   { days: 30, label: "Last 30 days" },
   { days: 90, label: "Last 90 days" },
 ] as const;
 
+interface Setup {
+  hasDocuments: boolean;
+  hasConversation: boolean;
+  hasDomain: boolean;
+  hasTeammate: boolean;
+}
+
 interface Overview {
   bots: Bot[];
   usageByBot: Map<string, BotUsage>;
-  /** The same window immediately before, for the "vs last N days" deltas. */
+  /** The same window immediately before, for the "vs previous" deltas. */
   previousByBot: Map<string, BotUsage>;
   recent: Array<Conversation & { botName: string }>;
+  setup: Setup;
+}
+
+/** A failed optional lookup counts as "not done yet" rather than breaking the page. */
+function orElse<T>(promise: Promise<T>, fallback: T): Promise<T> {
+  return promise.catch(() => fallback);
 }
 
 /**
  * Loads the organization's picture from per-bot endpoints.
  *
  * There is no org-wide analytics endpoint, so this fans out: two usage calls
- * and one conversation call per bot. Fine for the handful of bots a workspace
- * has, and honest about it — the fix is an aggregate endpoint on the backend,
- * not a cleverer client.
+ * and one conversation call per bot, plus the setup-guide checks. Fine for the
+ * handful of bots a workspace has, and honest about it: the fix is an
+ * aggregate endpoint on the backend, not a cleverer client.
  */
 async function loadOverview(days: number): Promise<Overview> {
   const bots = (await api.bots.list()).items;
@@ -74,14 +65,17 @@ async function loadOverview(days: number): Promise<Overview> {
   // UTC dates throughout: the backend buckets usage by UTC day.
   const to = utcToday();
   const from = utcDaysAgo(days - 1);
-  // The window immediately before this one, same length.
   const previousTo = utcDaysAgo(days);
   const previousFrom = utcDaysAgo(days * 2 - 1);
 
-  const [usages, previous, conversations] = await Promise.all([
+  const [usages, previous, conversations, documents, domains, members] = await Promise.all([
     Promise.all(bots.map((bot) => api.usage.forBot(bot.id, from, to))),
     Promise.all(bots.map((bot) => api.usage.forBot(bot.id, previousFrom, previousTo))),
     Promise.all(bots.map((bot) => api.conversations.list(bot.id, 0, 5))),
+    // Setup guide: each check is a real lookup, never a guess.
+    Promise.all(bots.map((bot) => orElse(api.knowledge.listDocuments(bot.id, 0, 1).then((p) => p.totalItems), 0))),
+    Promise.all(bots.map((bot) => orElse(api.credentials.listDomains(bot.id).then((d) => d.length), 0))),
+    orElse(api.members.list().then((m) => m.length), 0),
   ]);
 
   const nameById = new Map(bots.map((bot) => [bot.id, bot.name]));
@@ -104,52 +98,65 @@ async function loadOverview(days: number): Promise<Overview> {
     usageByBot: new Map(bots.map((bot, index) => [bot.id, usages[index]])),
     previousByBot: new Map(bots.map((bot, index) => [bot.id, previous[index]])),
     recent,
+    setup: {
+      hasDocuments: documents.some((count) => count > 0),
+      hasConversation: conversations.some((page) => page.totalItems > 0),
+      hasDomain: domains.some((count) => count > 0),
+      hasTeammate: members > 1,
+    },
   };
 }
 
 export default function OverviewPage() {
   const { user } = useAuth();
-  const [days, setDays] = useState<number>(7);
+  const [days, setDays] = useState<number>(14);
   const { data, loading, error, reload } = useAsync(() => loadOverview(days), [days]);
 
   const firstName = user?.user.name.split(/\s+/)[0] ?? "there";
+  const today = new Date().toLocaleDateString(undefined, { weekday: "long", day: "numeric", month: "long" });
 
   return (
     <>
       <PageHeader
-        title={
-          <>
-            {greeting()}, <em className="font-medium text-clay">{firstName}</em>
-          </>
-        }
-        description="Here's what's happening with your assistants today."
+        eyebrow={today}
+        title={`${greeting()}, ${firstName}`}
+        description={data ? summaryLine(data) : "Here’s what’s happening with your assistants."}
         action={
-          <Link href="/bots" className={buttonLink}>
-            <Plus className="h-4 w-4" />
-            Create bot
-          </Link>
+          <div className="flex flex-wrap gap-2.5">
+            <Link
+              href="/inbox"
+              className="inline-flex min-h-11 items-center rounded-xl border border-[#e2d4c5] bg-surface px-4 text-sm font-semibold text-ink hover:bg-cream"
+            >
+              Open inbox
+            </Link>
+            <Link href="/bots" className={buttonLink}>
+              <Plus className="h-4 w-4" />
+              New bot
+            </Link>
+          </div>
         }
       />
-
-      <FeatureStrip />
 
       {loading ? (
         <Loading />
       ) : error ? (
         <ErrorNote message={error} onRetry={reload} />
       ) : !data || data.bots.length === 0 ? (
-        <Card>
-          <Empty
-            icon={<BotIcon className="h-7 w-7" />}
-            title="No bots yet"
-            description="Create a bot, give it a document to read, and it can start answering."
-            action={
-              <Link href="/bots" className={buttonLink}>
-                Create your first bot
-              </Link>
-            }
-          />
-        </Card>
+        <div className="grid gap-4 lg:grid-cols-3">
+          <Card className="lg:col-span-2">
+            <Empty
+              icon={<BotIcon className="h-7 w-7" />}
+              title="No bots yet"
+              description="Create a bot, give it a document to read, and it can start answering."
+              action={
+                <Link href="/bots" className={buttonLink}>
+                  Create your first bot
+                </Link>
+              }
+            />
+          </Card>
+          <SetupGuide hasBot={false} setup={null} />
+        </div>
       ) : (
         <Body data={data} days={days} onDaysChange={setDays} />
       )}
@@ -157,24 +164,26 @@ export default function OverviewPage() {
   );
 }
 
-function Body({
-  data,
-  days,
-  onDaysChange,
-}: {
-  data: Overview;
-  days: number;
-  onDaysChange: (days: number) => void;
-}) {
-  const { bots, usageByBot, previousByBot, recent } = data;
+/** "Your assistants answered 214 questions today." Built only from real counts. */
+function summaryLine(data: Overview) {
+  const today = utcToday();
+  const answeredToday = [...data.usageByBot.values()].reduce(
+    (total, usage) => total + (usage.days.find((day) => day.date === today)?.messages ?? 0),
+    0,
+  );
+  const escalated = data.recent.filter((c) => c.resolution === "ESCALATED").length;
+  const first = `Your assistants handled ${formatNumber(answeredToday)} message${answeredToday === 1 ? "" : "s"} today.`;
+  return escalated > 0 ? `${first} Some customers are waiting for a person.` : first;
+}
+
+function Body({ data, days, onDaysChange }: { data: Overview; days: number; onDaysChange: (days: number) => void }) {
+  const { bots, usageByBot, previousByBot, recent, setup } = data;
 
   const totals = sum([...usageByBot.values()]);
   const before = sum([...previousByBot.values()]);
 
-  const groundedRate =
-    totals.answers > 0 ? (totals.grounded / totals.answers) * 100 : null;
-  const groundedRateBefore =
-    before.answers > 0 ? (before.grounded / before.answers) * 100 : null;
+  const groundedRate = totals.answers > 0 ? (totals.grounded / totals.answers) * 100 : null;
+  const groundedRateBefore = before.answers > 0 ? (before.grounded / before.answers) * 100 : null;
 
   // A mean of per-bot means would weight a quiet bot the same as a busy one,
   // so this weights each bot's average by the answers it actually produced.
@@ -182,70 +191,43 @@ function Body({
   const responseMsBefore = weightedAverageResponse([...previousByBot.values()]);
 
   const series = mergeDays([...usageByBot.values()]);
-
-  const topBots = bots
-    .map((bot) => ({
-      bot,
-      usage: usageByBot.get(bot.id),
-      previous: previousByBot.get(bot.id),
-    }))
-    .filter((row) => (row.usage?.totalMessages ?? 0) > 0)
-    .sort((a, b) => (b.usage?.totalMessages ?? 0) - (a.usage?.totalMessages ?? 0))
-    .slice(0, 4);
+  const busiest = series.reduce((max, day) => Math.max(max, day.conversations), 0);
 
   return (
-    <>
-      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
+    <div className="flex flex-col gap-5">
+      <section aria-label={`Last ${days} days`} className="grid grid-cols-[repeat(auto-fit,minmax(220px,1fr))] gap-4">
         <Tile
-          label="Messages"
-          value={formatNumber(totals.messages)}
-          delta={percentChange(totals.messages, before.messages)}
-          days={days}
-          icon={<MessagesSquare className="h-4 w-4" />}
-        />
-        <Tile
-          label="Sessions"
+          label={`Conversations · ${days} days`}
           value={formatNumber(totals.conversations)}
           delta={percentChange(totals.conversations, before.conversations)}
-          days={days}
-          icon={<Sparkles className="h-4 w-4" />}
         />
+        <Tile label="Messages" value={formatNumber(totals.messages)} delta={percentChange(totals.messages, before.messages)} />
         <Tile
-          label="Grounded"
-          value={groundedRate === null ? "—" : `${groundedRate.toFixed(1)}%`}
-          delta={
-            groundedRate !== null && groundedRateBefore !== null
-              ? groundedRate - groundedRateBefore
-              : null
-          }
+          label="Grounded answers"
+          value={groundedRate === null ? "—" : `${groundedRate.toFixed(0)}%`}
+          delta={groundedRate !== null && groundedRateBefore !== null ? groundedRate - groundedRateBefore : null}
           deltaUnit="pp"
-          days={days}
-          icon={<ShieldCheck className="h-4 w-4" />}
         />
         <Tile
-          label="Avg. Response Time"
-          value={responseMs === null ? "—" : `${(responseMs / 1000).toFixed(2)}s`}
-          delta={
-            responseMs !== null && responseMsBefore !== null
-              ? percentChange(responseMs, responseMsBefore)
-              : null
-          }
-          days={days}
+          label="Avg. response time"
+          value={responseMs === null ? "—" : `${(responseMs / 1000).toFixed(1)} s`}
+          delta={responseMs !== null && responseMsBefore !== null ? percentChange(responseMs, responseMsBefore) : null}
           // Faster is better, so a fall is good news here.
           lowerIsBetter
-          icon={<Clock className="h-4 w-4" />}
         />
-      </div>
+      </section>
 
-      <div className="mt-4 grid grid-cols-1 gap-4 xl:grid-cols-3">
-        <Card className="xl:col-span-2">
-          <CardHeader
-            title="Conversations"
-            action={
+      <div className="grid gap-4 lg:grid-cols-3">
+        <Card className="min-w-0 p-6 lg:col-span-2">
+          <div className="flex flex-wrap items-center gap-3">
+            <h2 className="font-display text-[20px] font-semibold">Conversations, {RANGES.find((r) => r.days === days)?.label.toLowerCase()}</h2>
+            <span className="text-[13px] text-muted">{formatNumber(totals.conversations)} total</span>
+            <div className="ml-auto flex items-center gap-3">
               <Select
+                aria-label="Date range"
                 value={days}
                 onChange={(event) => onDaysChange(Number(event.target.value))}
-                className="w-auto py-1 text-[13px]"
+                className="w-auto text-[13px]"
               >
                 {RANGES.map((range) => (
                   <option key={range.days} value={range.days}>
@@ -253,207 +235,179 @@ function Body({
                   </option>
                 ))}
               </Select>
-            }
-          />
-          <div className="p-5">
-            {series.length === 0 ? (
-              <Empty title="No activity yet" description="Charts appear once your bots are used." />
+              <Link href="/analytics" className="text-[14px] font-semibold text-accent hover:underline">
+                Analytics
+              </Link>
+            </div>
+          </div>
+          <div className="mt-5">
+            {series.length === 0 || busiest === 0 ? (
+              <Empty title="No activity yet" description="The chart fills in once your bots are used." />
             ) : (
-              <ResponsiveContainer width="100%" height={260}>
-                <AreaChart data={series} margin={{ top: 4, right: 8, bottom: 0, left: -20 }}>
-                  <defs>
-                    <linearGradient id="overviewFill" x1="0" y1="0" x2="0" y2="1">
-                      <stop offset="0%" stopColor={chart.primary} stopOpacity={0.25} />
-                      <stop offset="100%" stopColor={chart.primary} stopOpacity={0} />
-                    </linearGradient>
-                  </defs>
+              <ResponsiveContainer width="100%" height={220}>
+                <BarChart data={series} margin={{ top: 4, right: 4, bottom: 0, left: -20 }}>
                   <CartesianGrid stroke={chart.grid} vertical={false} />
-                  <XAxis
-                    dataKey="date"
-                    tick={chartAxis}
-                    tickLine={false}
-                    axisLine={false}
-                    tickFormatter={shortDay}
-                  />
-                  <YAxis
-                    tick={chartAxis}
-                    tickLine={false}
-                    axisLine={false}
-                    allowDecimals={false}
-                  />
+                  <XAxis dataKey="date" tick={chartAxis} tickLine={false} axisLine={false} tickFormatter={shortDay} />
+                  <YAxis tick={chartAxis} tickLine={false} axisLine={false} allowDecimals={false} />
                   <Tooltip
                     contentStyle={chartTooltip}
+                    cursor={{ fill: "#fbf6f0" }}
                     labelFormatter={(value) => shortDay(String(value))}
                   />
-                  <Area
-                    type="monotone"
-                    dataKey="conversations"
-                    stroke={chart.primary}
-                    strokeWidth={2}
-                    fill="url(#overviewFill)"
-                    dot={{ r: 2.5, fill: chart.primary }}
-                  />
-                </AreaChart>
+                  <Bar dataKey="conversations" name="Conversations" radius={[6, 6, 0, 0]} maxBarSize={30}>
+                    {/* Today in terracotta, so the latest day stands out. */}
+                    {series.map((day, index) => (
+                      <Cell key={day.date} fill={index === series.length - 1 ? chart.clay : chart.primary} />
+                    ))}
+                  </Bar>
+                </BarChart>
               </ResponsiveContainer>
             )}
           </div>
         </Card>
 
-        <Card>
-          <CardHeader
-            title="Top Bots"
-            action={
-              <Link href="/bots" className="text-[13px] font-medium text-clay hover:underline">
-                View all
-              </Link>
-            }
-          />
-          <div className="p-2">
-            {topBots.length === 0 ? (
-              <Empty title="Nothing to rank yet" />
-            ) : (
-              <ul>
-                {topBots.map(({ bot, usage, previous }) => {
-                  const delta = percentChange(
-                    usage?.totalMessages ?? 0,
-                    previous?.totalMessages ?? 0,
-                  );
-                  return (
-                    <li key={bot.id}>
-                      <Link
-                        href={`/bots/${bot.id}`}
-                        className="flex items-center gap-3 rounded-lg px-3 py-2.5 hover:bg-canvas"
-                      >
-                        <span className="grid h-8 w-8 shrink-0 place-items-center rounded-xl bg-clay-soft text-clay">
-                          <BotIcon className="h-4 w-4" />
-                        </span>
-                        <span className="min-w-0 flex-1 truncate text-sm">{bot.name}</span>
-                        <span className="text-sm font-semibold">
-                          {formatNumber(usage?.totalMessages ?? 0)}
-                        </span>
-                        <Delta value={delta} />
-                      </Link>
-                    </li>
-                  );
-                })}
-              </ul>
-            )}
-          </div>
-        </Card>
+        <SetupGuide hasBot setup={setup} />
       </div>
 
-      <div className="mt-4 grid grid-cols-1 gap-4 xl:grid-cols-3">
-        <Card className="xl:col-span-2">
-          <CardHeader
-            title="Recent Conversations"
-            action={
-              <Link
-                href="/conversations"
-                className="text-[13px] font-medium text-clay hover:underline"
-              >
-                View all
-              </Link>
-            }
-          />
-          <div className="p-2">
-            {recent.length === 0 ? (
-              <Empty title="No conversations yet" />
-            ) : (
-              <ul>
-                {recent.map((conversation) => (
-                  <li key={conversation.id}>
-                    <Link
-                      href={`/conversations/${conversation.id}`}
-                      className="flex items-center justify-between gap-3 rounded-lg px-3 py-2.5 hover:bg-canvas"
-                    >
-                      <span className="min-w-0 flex-1 truncate text-sm">
-                        {conversation.title ?? "Untitled conversation"}
-                      </span>
-                      <ResolutionBadge resolution={conversation.resolution} />
-                      <span className="w-16 shrink-0 text-right text-[12px] text-faint">
-                        {formatRelative(conversation.lastMessageAt ?? conversation.startedAt)}
-                      </span>
-                    </Link>
-                  </li>
-                ))}
-              </ul>
-            )}
+      <div className="grid gap-4 lg:grid-cols-3">
+        <Card className="min-w-0 overflow-hidden lg:col-span-2">
+          <div className="flex items-center px-6 pb-2 pt-5">
+            <h2 className="font-display text-[20px] font-semibold">Recent conversations</h2>
+            <Link href="/conversations" className="ml-auto text-[14px] font-semibold text-accent hover:underline">
+              View all
+            </Link>
           </div>
+          {recent.length === 0 ? (
+            <Empty title="No conversations yet" description="Try your bot in the Chat Playground to start one." />
+          ) : (
+            <div className="overflow-x-auto">
+              <table className="w-full text-[14px]">
+                <thead>
+                  <tr className="border-b border-line text-left text-[12px] font-semibold text-muted">
+                    <th className="px-6 py-3">Conversation</th>
+                    <th className="px-4 py-3">Bot</th>
+                    <th className="px-4 py-3">Status</th>
+                    <th className="px-6 py-3 text-right">When</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {recent.map((conversation) => (
+                    <tr key={conversation.id} className="border-b border-[#f3ece4] last:border-0 hover:bg-cream/60">
+                      <td className="max-w-[320px] truncate px-6 py-3.5">
+                        <Link href={`/conversations/${conversation.id}`} className="font-medium text-ink hover:underline">
+                          {conversation.title ?? "Untitled conversation"}
+                        </Link>
+                      </td>
+                      <td className="whitespace-nowrap px-4 py-3.5 text-muted">{conversation.botName}</td>
+                      <td className="px-4 py-3.5">
+                        <ResolutionBadge resolution={conversation.resolution} />
+                      </td>
+                      <td className="whitespace-nowrap px-6 py-3.5 text-right text-muted">
+                        {formatRelative(conversation.lastMessageAt ?? conversation.startedAt)}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
         </Card>
 
-        <Card>
-          <CardHeader
-            title="Bot Status"
-            action={
-              <Link href="/bots" className="text-[13px] font-medium text-clay hover:underline">
-                View all
-              </Link>
-            }
-          />
-          <div className="p-2">
-            <ul>
-              {bots.map((bot) => (
-                <li
-                  key={bot.id}
-                  className="flex items-center gap-2.5 px-3 py-2.5 text-sm"
-                >
-                  <BotIcon className="h-4 w-4 shrink-0 text-faint" />
-                  <span className="min-w-0 flex-1 truncate">{bot.name}</span>
-                  <span
-                    className={cx(
-                      "flex items-center gap-1.5 text-[12.5px]",
-                      bot.status === "ACTIVE" ? "text-ok" : "text-warn",
-                    )}
+        <Card className="p-6">
+          <div className="mb-2 flex items-center">
+            <h2 className="font-display text-[20px] font-semibold">Bot status</h2>
+            <Link href="/bots" className="ml-auto text-[14px] font-semibold text-accent hover:underline">
+              View all
+            </Link>
+          </div>
+          <ul>
+            {bots.map((bot) => {
+              const conversationsCount = usageByBot.get(bot.id)?.totalConversations ?? 0;
+              const online = bot.status === "ACTIVE";
+              return (
+                <li key={bot.id}>
+                  <Link
+                    href={`/bots/${bot.id}`}
+                    className="flex items-center gap-3 border-b border-[#f3ece4] py-3 last:border-0"
                   >
+                    <span className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-accent-soft font-display font-semibold text-accent">
+                      {bot.name.slice(0, 1).toUpperCase()}
+                    </span>
+                    <span className="min-w-0 flex-1">
+                      <span className="block truncate text-[14px] font-semibold">{bot.name}</span>
+                      <span className="block text-[13px] text-muted">
+                        {formatNumber(conversationsCount)} conversation{conversationsCount === 1 ? "" : "s"}
+                      </span>
+                    </span>
                     <span
                       className={cx(
-                        "h-1.5 w-1.5 rounded-full",
-                        bot.status === "ACTIVE" ? "bg-ok" : "bg-warn",
+                        "rounded-full px-2.5 py-0.5 text-[12px] font-semibold",
+                        online ? "bg-ok-soft text-ok" : "bg-warn-soft text-warn",
                       )}
-                    />
-                    {bot.status === "ACTIVE" ? "Online" : "Maintenance"}
-                  </span>
+                    >
+                      {online ? "Online" : "Paused"}
+                    </span>
+                  </Link>
                 </li>
-              ))}
-            </ul>
-          </div>
+              );
+            })}
+          </ul>
         </Card>
       </div>
-    </>
+    </div>
   );
 }
 
 // ------------------------------------------------------------------ pieces --
 
-const FEATURES = [
-  { href: "/health", label: "KB Health", body: "Find outdated or conflicting content", icon: HeartPulse, tint: "bg-sage-soft text-accent" },
-  { href: "/studio", label: "Widget Studio", body: "Style it, preview it, embed it", icon: SlidersHorizontal, tint: "bg-clay-soft text-clay" },
-  { href: "/inbox", label: "Handoff Inbox", body: "Escalations, owners, resolution", icon: Inbox, tint: "bg-warn-soft text-warn" },
-  { href: "/insights", label: "Insights", body: "Common and unanswered questions", icon: BarChart3, tint: "bg-sage-soft text-accent" },
-  { href: "/ask", label: "Ask Intelli", body: "Your AI setup guide", icon: Sparkles, tint: "bg-clay-soft text-clay" },
-];
+/** Every step is checked against real data; nothing is ticked by assumption. */
+function SetupGuide({ hasBot, setup }: { hasBot: boolean; setup: Setup | null }) {
+  const steps = [
+    { label: "Create your first bot", href: "/bots", done: hasBot },
+    { label: "Upload documents", href: "/knowledge", done: setup?.hasDocuments ?? false },
+    { label: "Test it in the playground", href: "/playground", done: setup?.hasConversation ?? false },
+    { label: "Allow your website’s domain", href: "/domains", done: setup?.hasDomain ?? false },
+    { label: "Invite a teammate", href: "/members", done: setup?.hasTeammate ?? false },
+  ];
+  const done = steps.filter((step) => step.done).length;
+  const percent = Math.round((done / steps.length) * 100);
 
-/** Shortcuts to the newer tools, so they are found without hunting the sidebar. */
-function FeatureStrip() {
   return (
-    <div className="mb-5 grid grid-cols-2 gap-3 md:grid-cols-3 xl:grid-cols-5">
-      {FEATURES.map(({ href, label, body, icon: Icon, tint }) => (
-        <Link
-          key={href}
-          href={href}
-          className="group flex items-center gap-3 rounded-2xl border border-line bg-surface p-3 shadow-soft transition-transform hover:-translate-y-0.5"
-        >
-          <span className={cx("grid h-10 w-10 shrink-0 place-items-center rounded-xl", tint)}>
-            <Icon className="h-5 w-5" />
-          </span>
-          <span className="min-w-0 flex-1">
-            <span className="block text-[13.5px] font-semibold">{label}</span>
-            <span className="block truncate text-[12px] text-muted">{body}</span>
-          </span>
-          <ArrowRight className="h-3.5 w-3.5 shrink-0 text-faint transition-transform group-hover:translate-x-0.5" />
-        </Link>
-      ))}
-    </div>
+    <Card className="flex flex-col gap-3.5 p-6">
+      <h2 className="font-display text-[20px] font-semibold">Your setup guide</h2>
+      <div
+        className="h-2 overflow-hidden rounded-full bg-[#f3ece4]"
+        role="progressbar"
+        aria-valuenow={percent}
+        aria-valuemin={0}
+        aria-valuemax={100}
+        aria-label="Setup progress"
+      >
+        <div className="h-full rounded-full bg-accent" style={{ width: `${percent}%` }} />
+      </div>
+      <p className="text-[13px] text-muted">
+        {done} of {steps.length} steps done
+      </p>
+      <ul className="flex flex-col">
+        {steps.map((step) => (
+          <li key={step.label}>
+            <Link href={step.href} className="flex min-h-10 items-center gap-3 text-[14px] hover:text-accent">
+              {step.done ? (
+                <span className="grid h-[22px] w-[22px] shrink-0 place-items-center rounded-full bg-accent text-white">
+                  <Check className="h-3.5 w-3.5" strokeWidth={3} />
+                </span>
+              ) : (
+                <span className="h-[22px] w-[22px] shrink-0 rounded-full border-2 border-clay" aria-hidden />
+              )}
+              <span className={cx("flex-1", step.done && "text-muted line-through decoration-line")}>
+                {step.label}
+                <span className="sr-only">{step.done ? " (done)" : " (to do)"}</span>
+              </span>
+            </Link>
+          </li>
+        ))}
+      </ul>
+    </Card>
   );
 }
 
@@ -462,31 +416,22 @@ function Tile({
   value,
   delta,
   deltaUnit,
-  days,
-  icon,
   lowerIsBetter,
 }: {
   label: string;
   value: string;
   delta: number | null;
   deltaUnit?: "pp";
-  days: number;
-  icon: React.ReactNode;
   lowerIsBetter?: boolean;
 }) {
   return (
-    <Card className="p-5">
-      <div className="flex items-center justify-between">
-        <span className="text-[13px] text-muted">{label}</span>
-        <span className="grid h-8 w-8 place-items-center rounded-xl bg-clay-soft text-clay">
-          {icon}
-        </span>
-      </div>
-      <p className="mt-2 font-display text-[30px] font-semibold leading-tight tracking-tight">{value}</p>
-      <div className="mt-1 flex items-center gap-1.5">
+    <Card className="flex flex-col gap-1.5 px-5 py-5">
+      <span className="text-[14px] font-medium text-muted">{label}</span>
+      <span className="font-display text-[32px] font-semibold leading-tight tracking-tight">{value}</span>
+      <span className="flex items-center gap-1.5">
         <Delta value={delta} unit={deltaUnit} lowerIsBetter={lowerIsBetter} />
-        <span className="text-[12px] text-faint">vs last {days} days</span>
-      </div>
+        <span className="text-[12px] text-muted">vs previous period</span>
+      </span>
     </Card>
   );
 }
@@ -497,17 +442,9 @@ function Tile({
  * Renders nothing measurable when the previous period was empty: "+100%"
  * against a baseline of zero is arithmetic, not information.
  */
-function Delta({
-  value,
-  unit,
-  lowerIsBetter,
-}: {
-  value: number | null;
-  unit?: "pp";
-  lowerIsBetter?: boolean;
-}) {
+function Delta({ value, unit, lowerIsBetter }: { value: number | null; unit?: "pp"; lowerIsBetter?: boolean }) {
   if (value === null || !Number.isFinite(value)) {
-    return <span className="text-[12px] text-faint">—</span>;
+    return <span className="text-[13px] text-muted">—</span>;
   }
 
   const improved = lowerIsBetter ? value < 0 : value > 0;
@@ -516,18 +453,13 @@ function Delta({
   return (
     <span
       className={cx(
-        "flex items-center gap-0.5 text-[12px] font-medium",
+        "flex items-center gap-0.5 text-[13px] font-semibold",
         flat ? "text-muted" : improved ? "text-ok" : "text-bad",
       )}
     >
-      {!flat &&
-        (value > 0 ? (
-          <ArrowUpRight className="h-3 w-3" />
-        ) : (
-          <ArrowDownRight className="h-3 w-3" />
-        ))}
+      {!flat && (value > 0 ? <ArrowUpRight className="h-3.5 w-3.5" /> : <ArrowDownRight className="h-3.5 w-3.5" />)}
       {Math.abs(value).toFixed(1)}
-      {unit === "pp" ? "pp" : "%"}
+      {unit === "pp" ? " pts" : "%"}
     </span>
   );
 }

@@ -10,8 +10,8 @@ import {
   Field,
   Input,
   Modal,
-  Select,
   Textarea,
+  cx,
 } from "@/components/ui";
 
 export function BotSettings({ bot, onSaved }: { bot: Bot; onSaved: () => void }) {
@@ -54,16 +54,25 @@ export function BotSettings({ bot, onSaved }: { bot: Bot; onSaved: () => void })
 
   return (
     <>
-      <Card className="max-w-2xl">
-        <CardHeader title="Settings" description="How this bot identifies and behaves." />
-        <form onSubmit={save} className="space-y-4 p-5">
-          <Field label="Name">
-            <Input
-              required
-              value={form.name}
-              onChange={(event) => setForm({ ...form, name: event.target.value })}
-            />
-          </Field>
+      <form onSubmit={save} className="flex flex-wrap items-start gap-5">
+        <Card className="min-w-0 flex-[999_1_480px]">
+          <CardHeader title="Personality" description="How this bot introduces itself and behaves." />
+          <div className="space-y-4 p-6">
+          <div className="grid gap-4 sm:grid-cols-2">
+            <Field label="Name">
+              <Input
+                required
+                value={form.name}
+                onChange={(event) => setForm({ ...form, name: event.target.value })}
+              />
+            </Field>
+            <Field label="Default language">
+              <Input
+                value={form.defaultLanguage}
+                onChange={(event) => setForm({ ...form, defaultLanguage: event.target.value })}
+              />
+            </Field>
+          </div>
 
           <Field label="Description" hint="Optional. Never shown to visitors.">
             <Textarea
@@ -72,27 +81,6 @@ export function BotSettings({ bot, onSaved }: { bot: Bot; onSaved: () => void })
               onChange={(event) => setForm({ ...form, description: event.target.value })}
             />
           </Field>
-
-          <div className="grid gap-4 sm:grid-cols-2">
-            <Field label="Status" hint="Paused bots stop answering the widget.">
-              <Select
-                value={form.status}
-                onChange={(event) =>
-                  setForm({ ...form, status: event.target.value as BotStatus })
-                }
-              >
-                <option value="ACTIVE">Online</option>
-                <option value="INACTIVE">Paused</option>
-              </Select>
-            </Field>
-
-            <Field label="Default language">
-              <Input
-                value={form.defaultLanguage}
-                onChange={(event) => setForm({ ...form, defaultLanguage: event.target.value })}
-              />
-            </Field>
-          </div>
 
           <Field
             label="System prompt"
@@ -126,21 +114,57 @@ export function BotSettings({ bot, onSaved }: { bot: Bot; onSaved: () => void })
               Save changes
             </Button>
           </div>
-        </form>
-      </Card>
+          </div>
+        </Card>
 
-      <Card className="mt-4 max-w-2xl border-bad/25">
-        <CardHeader title="Delete this bot" description="This cannot be undone." />
-        <div className="flex flex-wrap items-center justify-between gap-3 p-5">
-          <p className="text-[13px] text-muted">
-            Deletes the bot, its conversations, its embed keys, and every document in its
-            knowledge base.
-          </p>
-          <Button variant="danger" onClick={() => setConfirmDelete(true)}>
-            Delete bot
-          </Button>
-        </div>
-      </Card>
+        <aside className="flex min-w-0 flex-[1_1_300px] flex-col gap-5">
+          <Card className="p-6">
+            <h2 className="mb-1 font-display text-[18px] font-semibold">Availability</h2>
+            <p className="mb-4 text-[13px] text-muted">Paused bots stop answering in the widget.</p>
+            <fieldset className="flex flex-col gap-2.5">
+              <legend className="sr-only">Status</legend>
+              {(
+                [
+                  { value: "ACTIVE", label: "Online", body: "Answers visitors on your site." },
+                  { value: "INACTIVE", label: "Paused", body: "The widget says it is unavailable." },
+                ] as Array<{ value: BotStatus; label: string; body: string }>
+              ).map((option) => (
+                <label
+                  key={option.value}
+                  className={cx(
+                    "flex cursor-pointer items-start gap-3 rounded-xl border px-4 py-3 text-[14px]",
+                    form.status === option.value ? "border-2 border-accent bg-accent-soft" : "border-[#e2d4c5]",
+                  )}
+                >
+                  <input
+                    type="radio"
+                    name="status"
+                    value={option.value}
+                    checked={form.status === option.value}
+                    onChange={() => setForm({ ...form, status: option.value })}
+                    className="mt-1 accent-[#1f4b3b]"
+                  />
+                  <span>
+                    <span className="block font-semibold">{option.label}</span>
+                    <span className="text-muted">{option.body}</span>
+                  </span>
+                </label>
+              ))}
+            </fieldset>
+          </Card>
+
+          <section className="rounded-2xl border border-[#f2c9b8] bg-[#fffaf7] p-5">
+            <h2 className="text-[15px] font-semibold text-bad">Delete this bot</h2>
+            <p className="mb-3 mt-1 text-[13px] text-muted">
+              Deletes the bot, its conversations, its embed keys and every document in its knowledge base. This
+              cannot be undone.
+            </p>
+            <Button variant="danger" onClick={() => setConfirmDelete(true)}>
+              Delete bot
+            </Button>
+          </section>
+        </aside>
+      </form>
 
       <DeleteBotModal
         bot={bot}
