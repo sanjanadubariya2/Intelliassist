@@ -60,8 +60,12 @@ export interface SsoProvider {
  * Where a provider button sends the browser. A full navigation, not a fetch:
  * the backend answers with a redirect to the provider's own sign-in page.
  */
-export function ssoStartUrl(provider: SsoProviderId) {
-  return `${BASE_URL}/api/v1/auth/oauth/${provider}/start`;
+export function ssoStartUrl(provider: SsoProviderId, returnTo?: string) {
+  // Tells the backend where to come back to: this dashboard, on whatever port
+  // it happens to be running. The backend accepts it only if it is an allowed
+  // origin, and otherwise falls back to OAUTH_FRONTEND_URL.
+  const query = returnTo ? `?return_to=${encodeURIComponent(returnTo)}` : "";
+  return `${BASE_URL}/api/v1/auth/oauth/${provider}/start${query}`;
 }
 
 /** What each `sso_error` code from the backend means, in words. */
@@ -467,6 +471,43 @@ interface RequestOptions {
   signal?: AbortSignal;
 }
 
+/**
+ * Explains a request that never got a response.
+ *
+ * fetch rejects without saying why: connection refused, DNS failure and a CORS
+ * rejection all look identical. The old message always blamed a stopped
+ * backend, which was wrong in the commonest local case: the dashboard on port
+ * 3001 (Next.js moves there when 3000 is busy), refused by the API's CORS
+ * policy while the API was perfectly healthy.
+ *
+ * So ask once more in `no-cors` mode, which CORS cannot block. If that
+ * resolves, the server is up and the browser refused to share its answer with
+ * this page: an origin problem, named as such, with the origin to allow.
+ */
+async function unreachable(): Promise<ApiError> {
+  let serverUp = false;
+  try {
+    await fetch(`${BASE_URL}/api/v1/health`, { mode: "no-cors", cache: "no-store" });
+    serverUp = true;
+  } catch {
+    serverUp = false;
+  }
+
+  if (serverUp && typeof window !== "undefined") {
+    return new ApiError(
+      0,
+      `The API at ${BASE_URL} is running but refused requests from ${window.location.origin}. ` +
+        `Add ${window.location.origin} to CORS_ALLOWED_ORIGINS in .env and restart the backend ` +
+        "(docker compose --profile app up -d backend).",
+    );
+  }
+  return new ApiError(
+    0,
+    `Cannot reach the API at ${BASE_URL}. Is the backend running? ` +
+      "Start it with: docker compose --profile app up -d",
+  );
+}
+
 async function request<T>(path: string, options: RequestOptions = {}): Promise<T> {
   const token = tokenStore.get();
   const headers: Record<string, string> = {};
@@ -483,17 +524,8 @@ async function request<T>(path: string, options: RequestOptions = {}): Promise<T
       signal: options.signal,
     });
   } catch (cause) {
-    // fetch rejects rather than resolving when the request never reached the
-    // server: connection refused, DNS failure, CORS. The browser deliberately
-    // withholds which, so the message names the likeliest cause instead of
-    // blaming whatever the caller happened to be doing -- "could not create
-    // the account" sends someone hunting through a form that was fine.
     if (cause instanceof DOMException && cause.name === "AbortError") throw cause;
-    throw new ApiError(
-      0,
-      `Cannot reach the API at ${BASE_URL}. Is the backend running? ` +
-        "Start it with: docker compose --profile app up -d",
-    );
+    throw await unreachable();
   }
 
   if (!response.ok) {
@@ -729,9 +761,9 @@ export async function streamMessage(
   },
   signal?: AbortSignal,
 ): Promise<void> {
-  const response = await fetch(
-    `${BASE_URL}/api/v1/conversations/${conversationId}/messages/stream`,
-    {
+  let response: Response;
+  try {
+    response = await fetch(`${BASE_URL}/api/v1/conversations/${conversationId}/messages/stream`, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
@@ -739,8 +771,12 @@ export async function streamMessage(
       },
       body: JSON.stringify({ content }),
       signal,
-    },
-  );
+    });
+  } catch (cause) {
+    // Without this the chat showed the browser's bare "Failed to fetch".
+    if (cause instanceof DOMException && cause.name === "AbortError") throw cause;
+    throw await unreachable();
+  }
 
   if (!response.ok) throw await toError(response);
   if (!response.body) throw new ApiError(500, "The server sent no response body");

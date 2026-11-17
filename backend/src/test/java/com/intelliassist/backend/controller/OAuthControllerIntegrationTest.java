@@ -19,6 +19,7 @@ import java.io.IOException;
 import java.net.URLDecoder;
 import java.nio.charset.StandardCharsets;
 import java.util.Map;
+import java.util.List;
 import okhttp3.mockwebserver.MockResponse;
 import okhttp3.mockwebserver.MockWebServer;
 import org.junit.jupiter.api.AfterAll;
@@ -65,6 +66,8 @@ class OAuthControllerIntegrationTest extends AbstractIntegrationTest {
         registry.add("intelliassist.oauth.providers.google.user-info-url", () -> base + "userinfo");
         registry.add("intelliassist.oauth.providers.github.client-id", () -> "github-client");
         registry.add("intelliassist.oauth.providers.github.client-secret", () -> "github-secret");
+        // As in local development: the dashboard may be on any localhost port.
+        registry.add("intelliassist.cors.allowed-origins", () -> "http://localhost:[*]");
     }
 
     @AfterAll
@@ -174,6 +177,69 @@ class OAuthControllerIntegrationTest extends AbstractIntegrationTest {
         assertThat(URLDecoder.decode(params.getFirst("redirect_uri"), StandardCharsets.UTF_8))
                 .isEqualTo("http://localhost:8080/api/v1/auth/oauth/google/callback");
         assertThat(params.getFirst("state")).isNotBlank();
+    }
+
+    /** The dashboard on port 3001 used to be sent to a dead page on 3000. */
+    @Test
+    void theTokenGoesBackToTheDashboardThatStartedTheSignIn() throws Exception {
+        enqueueGoogle("g-ret", "ret@example.com", true, "Return Tester");
+
+        MockHttpServletResponse started =
+                mockMvc.perform(
+                                get("/api/v1/auth/oauth/google/start")
+                                        .param("return_to", "http://localhost:3001"))
+                        .andExpect(status().isFound())
+                        .andReturn()
+                        .getResponse();
+        String state =
+                UriComponentsBuilder.fromUriString(started.getRedirectedUrl())
+                        .build()
+                        .getQueryParams()
+                        .getFirst("state");
+        Cookie returnCookie = started.getCookie(OAuthController.RETURN_COOKIE);
+        assertThat(returnCookie).isNotNull();
+        assertThat(returnCookie.isHttpOnly()).isTrue();
+
+        String location =
+                mockMvc.perform(
+                                get("/api/v1/auth/oauth/google/callback")
+                                        .param("code", "auth-code")
+                                        .param("state", state)
+                                        .cookie(
+                                                started.getCookie(OAuthController.NONCE_COOKIE),
+                                                returnCookie))
+                        .andExpect(status().isFound())
+                        .andReturn()
+                        .getResponse()
+                        .getRedirectedUrl();
+
+        assertThat(location).startsWith("http://localhost:3001/auth/callback#token=");
+    }
+
+    /**
+     * The token travels in the redirect, so a return address outside the
+     * allowed origins must be ignored: otherwise any site could start a
+     * sign-in and receive the victim's session token.
+     */
+    @Test
+    void aReturnAddressOutsideTheAllowedOriginsIsIgnored() throws Exception {
+        for (String hostile :
+                List.of(
+                        "https://evil.example",
+                        "http://localhost:3001.evil.example",
+                        "http://localhost:3001/@evil.example",
+                        "javascript:alert(1)")) {
+            mockMvc.perform(
+                            get("/api/v1/auth/oauth/linkedin/start").param("return_to", hostile))
+                    .andExpect(status().isFound())
+                    .andExpect(
+                            result ->
+                                    assertThat(result.getResponse().getRedirectedUrl())
+                                            .as(hostile)
+                                            .isEqualTo(
+                                                    FRONTEND
+                                                            + "/login?sso_error=provider_not_configured"));
+        }
     }
 
     @Test

@@ -49,3 +49,10 @@ logging:
     # Hibernate logs bind parameters at TRACE, which would put customer data
     # and password hashes into the log stream.
     org.hibernate.SQL: OFF
+
+intelliassist:
+  cors:
+    # No default in production. The local default allows any localhost port,
+    # which is wrong for a deployed dashboard; an unset value here fails the
+    # dashboard's requests loudly rather than quietly trusting localhost.
+    allowed-origins: ${CORS_ALLOWED_ORIGINS:}

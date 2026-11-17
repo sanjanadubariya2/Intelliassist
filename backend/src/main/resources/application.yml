@@ -106,7 +106,9 @@ intelliassist:
     expiration: ${JWT_EXPIRATION:12h}
     issuer: intelliassist
   cors:
-    allowed-origins: ${CORS_ALLOWED_ORIGINS:http://localhost:3000}
+    # Origin patterns. Locally any port, because Next.js moves to 3001+ when
+    # 3000 is busy. In production set CORS_ALLOWED_ORIGINS to the exact origin.
+    allowed-origins: ${CORS_ALLOWED_ORIGINS:http://localhost:[*],http://127.0.0.1:[*]}
   # Single sign-on. A provider is offered only when both its client id and
   # secret are set; leave them empty to turn it off. Register this callback
   # with each provider:  <OAUTH_PUBLIC_URL>/api/v1/auth/oauth/<provider>/callback

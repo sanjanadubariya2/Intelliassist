@@ -14,6 +14,7 @@ import java.time.Instant;
 import java.util.Base64;
 import java.util.Date;
 import javax.crypto.SecretKey;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
 /**
@@ -48,6 +49,9 @@ public class OAuthStateService {
     private final Clock clock;
     private final SecureRandom random = new SecureRandom();
 
+    // Two constructors, so Spring must be told which one to use; without this
+    // it looks for a no-argument constructor and the application fails to start.
+    @Autowired
     public OAuthStateService(JwtProperties jwtProperties) {
         this(jwtProperties, Clock.systemUTC());
     }

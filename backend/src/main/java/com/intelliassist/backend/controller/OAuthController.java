@@ -1,5 +1,6 @@
 package com.intelliassist.backend.controller;
 
+import com.intelliassist.backend.config.CorsProperties;
 import com.intelliassist.backend.dto.auth.AuthResponse;
 import com.intelliassist.backend.entity.IdentityProvider;
 import com.intelliassist.backend.security.oauth.OAuthClient;
@@ -25,6 +26,7 @@ import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.cors.CorsConfiguration;
 import org.springframework.web.util.UriComponentsBuilder;
 
 /**
@@ -53,22 +55,36 @@ public class OAuthController {
     private static final Logger log = LoggerFactory.getLogger(OAuthController.class);
 
     static final String NONCE_COOKIE = "ia_oauth_nonce";
+
+    /**
+     * Which dashboard address started the sign-in, so the browser returns there.
+     * A fixed OAUTH_FRONTEND_URL sent anyone running the dashboard on port 3001
+     * (Next.js moves there when 3000 is busy) to a page that does not exist.
+     */
+    static final String RETURN_COOKIE = "ia_oauth_return";
     private static final String COOKIE_PATH = "/api/v1/auth/oauth";
 
     private final OAuthProperties properties;
     private final OAuthStateService stateService;
     private final OAuthClient client;
     private final AuthService authService;
+    private final CorsConfiguration dashboardOrigins;
 
     public OAuthController(
             OAuthProperties properties,
             OAuthStateService stateService,
             OAuthClient client,
-            AuthService authService) {
+            AuthService authService,
+            CorsProperties corsProperties) {
         this.properties = properties;
         this.stateService = stateService;
         this.client = client;
         this.authService = authService;
+        // The same allow-list the dashboard's CORS uses. A return address is
+        // honoured only if the dashboard could talk to this API from it anyway,
+        // so the sign-in token can never be sent to somebody else's site.
+        this.dashboardOrigins = new CorsConfiguration();
+        this.dashboardOrigins.setAllowedOriginPatterns(corsProperties.allowedOrigins());
     }
 
     /** Every provider and whether this deployment has it configured. */
@@ -86,14 +102,17 @@ public class OAuthController {
     }
 
     @GetMapping("/{provider}/start")
-    public ResponseEntity<Void> start(@PathVariable("provider") String providerId) {
+    public ResponseEntity<Void> start(
+            @PathVariable("provider") String providerId,
+            @RequestParam(value = "return_to", required = false) String returnTo) {
+        String dashboard = dashboardUrl(returnTo);
         IdentityProvider provider = IdentityProvider.fromId(providerId).orElse(null);
         if (provider == null) {
-            return toLogin("unknown_provider");
+            return toLogin(dashboard, "unknown_provider");
         }
         var maybeClient = properties.client(provider);
         if (maybeClient.isEmpty()) {
-            return toLogin("provider_not_configured");
+            return toLogin(dashboard, "provider_not_configured");
         }
 
         OAuthProperties.Client oauthClient = maybeClient.get();
@@ -116,6 +135,9 @@ public class OAuthController {
                 .header(
                         HttpHeaders.SET_COOKIE,
                         nonceCookie(issued.nonce(), OAuthStateService.TTL).toString())
+                .header(
+                        HttpHeaders.SET_COOKIE,
+                        cookie(RETURN_COOKIE, dashboard, OAuthStateService.TTL).toString())
                 .build();
     }
 
@@ -125,22 +147,25 @@ public class OAuthController {
             @RequestParam(value = "code", required = false) String code,
             @RequestParam(value = "state", required = false) String state,
             @RequestParam(value = "error", required = false) String error,
-            @CookieValue(value = NONCE_COOKIE, required = false) String nonce) {
+            @CookieValue(value = NONCE_COOKIE, required = false) String nonce,
+            @CookieValue(value = RETURN_COOKIE, required = false) String returnTo) {
+        // Re-checked here: a cookie is client input like any other.
+        String dashboard = dashboardUrl(returnTo);
         IdentityProvider provider = IdentityProvider.fromId(providerId).orElse(null);
         if (provider == null) {
-            return toLogin("unknown_provider");
+            return toLogin(dashboard, "unknown_provider");
         }
         if (error != null) {
             // Most often the person pressed Cancel on the provider's screen.
-            return toLogin("access_denied");
+            return toLogin(dashboard, "access_denied");
         }
         var maybeClient = properties.client(provider);
         if (maybeClient.isEmpty()) {
-            return toLogin("provider_not_configured");
+            return toLogin(dashboard, "provider_not_configured");
         }
         if (code == null || !stateService.verify(state, provider, nonce)) {
             log.warn("rejected {} callback: invalid or missing state", provider);
-            return toLogin("invalid_state");
+            return toLogin(dashboard, "invalid_state");
         }
 
         try {
@@ -151,27 +176,46 @@ public class OAuthController {
             OAuthProfile profile = client.fetchProfile(provider, endpoints, accessToken);
             AuthResponse auth = authService.signInWithProvider(profile);
 
-            URI target =
-                    URI.create(properties.frontendUrl() + "/auth/callback#token=" + auth.token());
+            URI target = URI.create(dashboard + "/auth/callback#token=" + auth.token());
             return ResponseEntity.status(HttpStatus.FOUND)
                     .location(target)
                     .header(HttpHeaders.SET_COOKIE, nonceCookie("", Duration.ZERO).toString())
+                    .header(HttpHeaders.SET_COOKIE, cookie(RETURN_COOKIE, "", Duration.ZERO).toString())
                     .build();
         } catch (OAuthException exception) {
             log.warn("{} sign-in failed: {}", provider, exception.code());
-            return toLogin(exception.code());
+            return toLogin(dashboard, exception.code());
         }
     }
 
-    private ResponseEntity<Void> toLogin(String code) {
+    /**
+     * Where to send the browser afterwards: the dashboard that asked, if it is
+     * an allowed origin, otherwise the configured OAUTH_FRONTEND_URL.
+     */
+    String dashboardUrl(String requested) {
+        if (requested != null && !requested.isBlank()) {
+            String origin = requested.strip();
+            while (origin.endsWith("/")) {
+                origin = origin.substring(0, origin.length() - 1);
+            }
+            if (origin.matches("https?://[^/?#\\s]+") && dashboardOrigins.checkOrigin(origin) != null) {
+                return origin;
+            }
+            log.warn("ignored a sign-in return address that is not an allowed dashboard origin");
+        }
+        return properties.frontendUrl();
+    }
+
+    private ResponseEntity<Void> toLogin(String dashboard, String code) {
         URI target =
-                UriComponentsBuilder.fromUriString(properties.frontendUrl() + "/login")
+                UriComponentsBuilder.fromUriString(dashboard + "/login")
                         .queryParam("sso_error", code)
                         .build()
                         .toUri();
         return ResponseEntity.status(HttpStatus.FOUND)
                 .location(target)
                 .header(HttpHeaders.SET_COOKIE, nonceCookie("", Duration.ZERO).toString())
+                .header(HttpHeaders.SET_COOKIE, cookie(RETURN_COOKIE, "", Duration.ZERO).toString())
                 .build();
     }
 
@@ -180,7 +224,11 @@ public class OAuthController {
      * Lax so it still rides along on the provider's top-level redirect back.
      */
     private ResponseCookie nonceCookie(String value, Duration maxAge) {
-        return ResponseCookie.from(NONCE_COOKIE, value)
+        return cookie(NONCE_COOKIE, value, maxAge);
+    }
+
+    private ResponseCookie cookie(String name, String value, Duration maxAge) {
+        return ResponseCookie.from(name, value)
                 .httpOnly(true)
                 .secure(properties.publicUrl().startsWith("https://"))
                 .sameSite("Lax")

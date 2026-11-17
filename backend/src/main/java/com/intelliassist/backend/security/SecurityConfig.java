@@ -187,13 +187,18 @@ public class SecurityConfig {
      * {@code Authorization} header, and a wildcard origin with credentials is
      * both rejected by browsers and unsafe.
      *
-     * <p>Public widget endpoints will need their own, looser configuration
-     * scoped to registered customer domains. That arrives with those endpoints.
+     * <p>Entries are origin <em>patterns</em>, so local development can allow
+     * {@code http://localhost:[*]}. Next.js moves to port 3001, 3002, ... when
+     * 3000 is taken, and an exact-origin list then rejected every request from
+     * the dashboard with a 403 preflight, which the browser reports only as a
+     * network failure: "Cannot reach the API", with the API perfectly healthy.
+     * A plain origin such as {@code https://app.example.com} is still matched
+     * exactly, so production lists stay as strict as before.
      */
     @Bean
     public CorsConfigurationSource corsConfigurationSource() {
         CorsConfiguration config = new CorsConfiguration();
-        config.setAllowedOrigins(corsProperties.allowedOrigins());
+        config.setAllowedOriginPatterns(corsProperties.allowedOrigins());
         config.setAllowedMethods(List.of("GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"));
         config.setAllowedHeaders(List.of("Authorization", "Content-Type", "X-Request-ID"));
         config.setExposedHeaders(List.of("X-Request-ID"));

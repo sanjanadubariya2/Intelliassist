@@ -18,6 +18,9 @@ export function SsoButtons({ verb }: { verb: "Continue" | "Sign up" }) {
   // Until the server answers, assume all are available; a wrong guess only
   // costs a redirect back to the login page with a clear message.
   const [providers, setProviders] = useState<SsoProvider[] | null>(null);
+  // Read after mount, so server and browser render the same link first.
+  const [origin, setOrigin] = useState<string | undefined>(undefined);
+  useEffect(() => setOrigin(window.location.origin), []);
 
   useEffect(() => {
     let cancelled = false;
@@ -43,7 +46,7 @@ export function SsoButtons({ verb }: { verb: "Continue" | "Sign up" }) {
           on ? "hover:border-[#cdb9a5] hover:bg-cream" : "cursor-not-allowed opacity-50",
         );
         return on ? (
-          <a key={id} href={ssoStartUrl(id)} className={className}>
+          <a key={id} href={ssoStartUrl(id, origin)} className={className}>
             <ProviderLogo id={id} />
             {label}
           </a>
